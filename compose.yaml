@@ -1,0 +1,38 @@
+services:
+
+  app:
+    image: node:24-alpine
+    container_name: my-virtual-closet-dev
+
+    working_dir: /app
+
+    command:
+      - sh
+      - -c
+      - |
+        corepack enable &&
+        corepack prepare pnpm@11.4.0 --activate &&
+        pnpm dev --host 0.0.0.0
+
+    volumes:
+      - ./:/app
+      - node_modules:/app/node_modules
+
+    ports:
+      - "100.74.236.102:5173:5173"
+
+    networks:
+      - mvc-dev
+
+    restart: unless-stopped
+
+networks:
+
+  mvc-dev:
+    name: my-virtual-closet-dev
+    driver: bridge
+
+volumes:
+
+  node_modules:
+    name: my-virtual-closet-node-modules

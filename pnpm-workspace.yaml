@@ -1,0 +1,14 @@
+mumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+minimumReleaseAgeIgnoreMissingTime: false
+
+blockExoticSubdeps: true
+strictDepBuilds: true
+
+allowBuilds: {}
+
+networkConcurrency: 4
+fetchRetries: 5
+fetchRetryMintimeout: 10000
+fetchRetryMaxtimeout: 120000
+fetchTimeout: 300000
