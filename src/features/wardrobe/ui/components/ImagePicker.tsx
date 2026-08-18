@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useRef, type ChangeEvent } from 'react'
 
 interface ImagePickerProps {
   onSelect: (file: File) => void
@@ -9,7 +9,7 @@ export default function ImagePicker({ onSelect, disabled = false }: ImagePickerP
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const galleryInputRef = useRef<HTMLInputElement>(null)
 
-  function handleChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
 
     if (file) {
