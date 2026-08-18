@@ -1,31 +1,38 @@
+import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router'
+import { db } from '../../../../infrastructure/database/db'
+import type { GarmentCategory } from '../../../wardrobe/domain/Garment'
 
-const categories = [
+const categories: Array<{
+  name: string
+  category: GarmentCategory
+  icon: string
+}> = [
   {
     name: 'Tops',
-    count: 0,
+    category: 'top',
     icon: '👚',
   },
   {
     name: 'Bottoms',
-    count: 0,
+    category: 'bottom',
     icon: '👖',
   },
   {
     name: 'Zapatos',
-    count: 0,
+    category: 'shoes',
     icon: '👟',
   },
 ]
 
 export default function HomePage() {
+  const garments = useLiveQuery(() => db.garments.toArray(), [], [])
+
   return (
     <div>
       <header className="flex items-center justify-between px-5 pb-4 pt-7">
         <div>
-          <p className="text-sm text-zinc-500">
-            Mi armario digital
-          </p>
+          <p className="text-sm text-zinc-500">Mi armario digital</p>
 
           <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-900">
             My Virtual Closet
@@ -43,9 +50,7 @@ export default function HomePage() {
             <span className="text-2xl">✨</span>
           </div>
 
-          <p className="text-sm font-medium text-violet-700">
-            Tu estilo, tus prendas
-          </p>
+          <p className="text-sm font-medium text-violet-700">Tu estilo, tus prendas</p>
 
           <h2 className="mt-1 max-w-[280px] text-2xl font-semibold leading-tight tracking-tight text-zinc-900">
             ¿Qué te vas a poner hoy?
@@ -66,51 +71,43 @@ export default function HomePage() {
 
       <section className="mt-7">
         <div className="flex items-center justify-between px-5">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            Tu closet
-          </h2>
+          <h2 className="text-lg font-semibold text-zinc-900">Tu closet</h2>
 
-          <Link
-            to="/closet"
-            className="text-sm font-medium text-violet-600"
-          >
+          <Link to="/closet" className="text-sm font-medium text-violet-600">
             Ver todo
           </Link>
         </div>
 
         <div className="mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
-          {categories.map((category) => (
-            <Link
-              key={category.name}
-              to="/closet"
-              className="min-w-[120px] flex-1 rounded-3xl border border-zinc-100 bg-white p-3 shadow-sm"
-            >
-              <div className="flex aspect-square items-center justify-center rounded-2xl bg-[#f5f1fa] text-5xl">
-                {category.icon}
-              </div>
+          {categories.map((category) => {
+            const count = garments.filter((garment) => garment.category === category.category).length
 
-              <h3 className="mt-3 text-sm font-semibold text-zinc-900">
-                {category.name}
-              </h3>
+            return (
+              <Link
+                key={category.name}
+                to="/closet"
+                className="min-w-[120px] flex-1 rounded-3xl border border-zinc-100 bg-white p-3 shadow-sm"
+              >
+                <div className="flex aspect-square items-center justify-center rounded-2xl bg-[#f5f1fa] text-5xl">
+                  {category.icon}
+                </div>
 
-              <p className="mt-0.5 text-xs text-zinc-500">
-                {category.count} prendas
-              </p>
-            </Link>
-          ))}
+                <h3 className="mt-3 text-sm font-semibold text-zinc-900">{category.name}</h3>
+
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  {count} {count === 1 ? 'prenda' : 'prendas'}
+                </p>
+              </Link>
+            )
+          })}
         </div>
       </section>
 
       <section className="mt-7 px-4">
         <div className="flex items-center justify-between px-1">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            Últimos looks
-          </h2>
+          <h2 className="text-lg font-semibold text-zinc-900">Últimos looks</h2>
 
-          <Link
-            to="/outfits"
-            className="text-sm font-medium text-violet-600"
-          >
+          <Link to="/outfits" className="text-sm font-medium text-violet-600">
             Ver todos
           </Link>
         </div>
