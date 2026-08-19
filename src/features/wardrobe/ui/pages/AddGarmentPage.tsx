@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { createGarment } from '../../application/createGarment'
 import type { GarmentCategory } from '../../domain/Garment'
@@ -171,7 +171,7 @@ export default function AddGarmentPage() {
   )
 }
 
-function Field({ children, label, optional = false }: { children: React.ReactNode; label: string; optional?: boolean }) {
+function Field({ children, label, optional = false }: { children: ReactNode; label: string; optional?: boolean }) {
   const htmlFor = label === 'Nombre' ? 'garment-name' : label === 'Categoría' ? 'garment-category' : label === 'Color principal' ? 'garment-color' : 'garment-brand'
 
   return (
