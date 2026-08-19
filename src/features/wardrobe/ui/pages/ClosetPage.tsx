@@ -4,11 +4,12 @@ import { Link } from 'react-router'
 import { db } from '../../../../infrastructure/database/db'
 import GarmentCard from '../components/GarmentCard'
 
-type ClosetFilter = 'all' | 'clothing' | 'shoes' | 'accessory'
+type ClosetFilter = 'all' | 'top' | 'bottom' | 'shoes' | 'accessory'
 
 const filters: Array<{ value: ClosetFilter; label: string }> = [
   { value: 'all', label: 'Todo' },
-  { value: 'clothing', label: 'Ropa' },
+  { value: 'top', label: 'Tops' },
+  { value: 'bottom', label: 'Bottoms' },
   { value: 'shoes', label: 'Calzado' },
   { value: 'accessory', label: 'Accesorios' },
 ]
@@ -23,7 +24,6 @@ export default function ClosetPage() {
   const isLoading = garments === undefined
   const visibleGarments = (garments ?? []).filter((garment) => {
     if (filter === 'all') return true
-    if (filter === 'clothing') return garment.category === 'top' || garment.category === 'bottom'
     return garment.category === filter
   })
   const isEmpty = !isLoading && garments?.length === 0
