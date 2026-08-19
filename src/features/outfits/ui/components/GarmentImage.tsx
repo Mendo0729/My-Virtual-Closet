@@ -28,7 +28,7 @@ export default function GarmentImage({ imageId, alt, className }: GarmentImagePr
     return (
       <div
         className={[
-          'flex items-center justify-center bg-violet-50 text-2xl text-violet-300',
+          'flex items-center justify-center bg-violet-50 text-2xl text-violet-300 dark:bg-violet-500/10 dark:text-violet-400',
           className,
         ]
           .filter(Boolean)
