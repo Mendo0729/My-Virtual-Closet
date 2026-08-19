@@ -27,6 +27,11 @@ const categories: Array<{
 
 export default function HomePage() {
   const garments = useLiveQuery(() => db.garments.toArray(), [], [])
+  const latestOutfits = useLiveQuery(
+    () => db.outfits.orderBy('createdAt').reverse().limit(2).toArray(),
+    [],
+    [],
+  )
 
   return (
     <div>
@@ -112,19 +117,42 @@ export default function HomePage() {
           </Link>
         </div>
 
-        <div className="mt-3 rounded-3xl border border-dashed border-zinc-300 bg-white px-6 py-9 text-center">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 text-xl">
-            ♡
+        {latestOutfits.length === 0 ? (
+          <div className="mt-3 rounded-3xl border border-dashed border-zinc-300 bg-white px-6 py-9 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 text-xl">
+              ♡
+            </div>
+
+            <p className="mt-3 text-sm font-semibold text-zinc-800">
+              Aún no tienes looks guardados
+            </p>
+
+            <p className="mx-auto mt-1 max-w-[250px] text-xs leading-5 text-zinc-500">
+              Crea tu primera combinación y aparecerá aquí.
+            </p>
           </div>
-
-          <p className="mt-3 text-sm font-semibold text-zinc-800">
-            Aún no tienes looks guardados
-          </p>
-
-          <p className="mx-auto mt-1 max-w-[250px] text-xs leading-5 text-zinc-500">
-            Crea tu primera combinación y aparecerá aquí.
-          </p>
-        </div>
+        ) : (
+          <div className="mt-3 space-y-3">
+            {latestOutfits.map((outfit) => (
+              <Link
+                key={outfit.id}
+                to="/outfits"
+                className="flex items-center justify-between rounded-3xl bg-white px-5 py-4 shadow-sm"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-zinc-900">{outfit.name}</p>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    {new Intl.DateTimeFormat('es-PA', {
+                      day: 'numeric',
+                      month: 'short',
+                    }).format(new Date(outfit.createdAt))}
+                  </p>
+                </div>
+                <span className="text-lg text-violet-500">›</span>
+              </Link>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   )
