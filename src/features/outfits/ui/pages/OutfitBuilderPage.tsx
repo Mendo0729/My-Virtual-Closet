@@ -118,16 +118,21 @@ export default function OutfitBuilderPage() {
   }
 
   return (
-    <div className="px-4 pt-7">
-      <div className="text-center">
-        <p className="text-sm font-medium text-violet-600">My Virtual Closet</p>
-        <h1 className="mt-1 text-2xl font-semibold tracking-tight">Construye tu look</h1>
-        <p className="mx-auto mt-2 max-w-[310px] text-sm leading-6 text-zinc-500">
-          Combina las prendas que ya tienes guardadas en tu closet.
-        </p>
+    <div className="px-3 pt-4">
+      <div className="flex items-end justify-between gap-3 px-1">
+        <div>
+          <p className="text-xs font-medium text-violet-600">My Virtual Closet</p>
+          <h1 className="mt-0.5 text-xl font-semibold tracking-tight">Construye tu look</h1>
+        </div>
+
+        <div className="rounded-full bg-violet-50 px-3 py-1.5 text-[11px] font-medium text-violet-700">
+          {selectedItems.length} prendas
+        </div>
       </div>
 
-      <div className="mt-7 space-y-4">
+      <p className="mt-1.5 px-1 text-xs text-zinc-400">Combina tu outfit completo sin perderlo de vista.</p>
+
+      <div className="mt-3 space-y-2.5">
         {slotDefinitions.map(({ slot, label }) => {
           const options = garmentsBySlot[slot]
           const currentIndex = getSafeIndex(slot)
@@ -146,12 +151,24 @@ export default function OutfitBuilderPage() {
         })}
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3">
+      {error && (
+        <p className="mt-3 rounded-2xl bg-red-50 px-4 py-2.5 text-sm text-red-700" role="alert">
+          {error}
+        </p>
+      )}
+
+      {!canSave && (
+        <p className="mt-2 px-2 text-center text-[11px] leading-4 text-zinc-400">
+          Agrega prendas en al menos dos categorías para guardar un look.
+        </p>
+      )}
+
+      <div className="sticky bottom-[74px] z-40 -mx-1 mt-3 grid grid-cols-2 gap-2 rounded-2xl border border-zinc-200/80 bg-white/95 p-2 shadow-lg shadow-zinc-200/60 backdrop-blur">
         <button
           type="button"
           disabled={garments.length === 0}
           onClick={randomizeLook}
-          className="rounded-2xl border border-zinc-200 bg-white py-3.5 text-sm font-semibold text-zinc-700 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-xl border border-zinc-200 bg-white py-3 text-sm font-semibold text-zinc-700 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Aleatorio
         </button>
@@ -163,23 +180,11 @@ export default function OutfitBuilderPage() {
             setError(undefined)
             setIsSaveOpen(true)
           }}
-          className="rounded-2xl bg-violet-600 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-xl bg-violet-600 py-3 text-sm font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Guardar look
         </button>
       </div>
-
-      {!canSave && (
-        <p className="mt-3 text-center text-xs leading-5 text-zinc-400">
-          Necesitas al menos dos categorías con prendas para guardar un look.
-        </p>
-      )}
-
-      {error && (
-        <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
-          {error}
-        </p>
-      )}
 
       {isSaveOpen && (
         <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/35 p-4 sm:items-center">
