@@ -3,12 +3,14 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router'
 import { db } from '../../../../infrastructure/database/db'
 import ClothingIcon from '../../../../shared/components/ClothingIcon'
+import UiIcon from '../../../../shared/components/UiIcon'
 import GarmentCard from '../components/GarmentCard'
 
-type ClosetFilter = 'all' | 'top' | 'bottom' | 'shoes' | 'accessory'
+type ClosetFilter = 'all' | 'favorite' | 'top' | 'bottom' | 'shoes' | 'accessory'
 
 const filters: Array<{ value: ClosetFilter; label: string }> = [
   { value: 'all', label: 'Todo' },
+  { value: 'favorite', label: 'Favoritos' },
   { value: 'top', label: 'Tops' },
   { value: 'bottom', label: 'Bottoms' },
   { value: 'shoes', label: 'Calzado' },
@@ -25,9 +27,11 @@ export default function ClosetPage() {
   const isLoading = garments === undefined
   const visibleGarments = (garments ?? []).filter((garment) => {
     if (filter === 'all') return true
+    if (filter === 'favorite') return Boolean(garment.favorite)
     return garment.category === filter
   })
   const isEmpty = !isLoading && garments?.length === 0
+  const isFavoriteEmpty = !isLoading && filter === 'favorite' && visibleGarments.length === 0
 
   return (
     <div className="px-4 pt-5">
@@ -55,12 +59,13 @@ export default function ClosetPage() {
               type="button"
               onClick={() => setFilter(item.value)}
               className={[
-                'shrink-0 rounded-xl px-4 py-2 text-[11px] font-bold transition',
+                'flex shrink-0 items-center gap-1.5 rounded-xl px-4 py-2 text-[11px] font-bold transition',
                 active
                   ? 'bg-violet-600 text-white shadow-md shadow-violet-500/20 dark:bg-violet-500'
                   : 'bg-zinc-100 text-zinc-600 dark:bg-[#0d1829] dark:text-slate-400',
               ].join(' ')}
             >
+              {item.value === 'favorite' && <UiIcon name="heart" className="h-3.5 w-3.5" />}
               {item.label}
             </button>
           )
@@ -102,6 +107,14 @@ export default function ClosetPage() {
               {visibleGarments.map((garment) => (
                 <GarmentCard key={garment.id} garment={garment} />
               ))}
+            </div>
+          ) : isFavoriteEmpty ? (
+            <div className="mt-4 rounded-[22px] border border-dashed border-pink-200 bg-pink-50/60 px-5 py-9 text-center dark:border-pink-500/15 dark:bg-pink-500/[0.05]">
+              <div className="mx-auto flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-pink-500 shadow-sm dark:bg-[#0d1829]">
+                <UiIcon name="heart" className="h-5 w-5" />
+              </div>
+              <p className="mt-3 text-sm font-extrabold text-zinc-800 dark:text-white">Aún no tienes favoritos</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-slate-400">Toca el corazón de una prenda para encontrarla aquí.</p>
             </div>
           ) : (
             <div className="mt-4 rounded-[22px] bg-zinc-50 px-5 py-8 text-center text-xs text-zinc-400 dark:bg-[#0d1829] dark:text-slate-500">

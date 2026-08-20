@@ -6,6 +6,7 @@ export interface Garment {
   category: GarmentCategory
   color: string
   brand?: string
+  favorite?: boolean
   imageId: string
   createdAt: string
   updatedAt: string

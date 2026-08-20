@@ -29,6 +29,7 @@ export async function createGarment(input: CreateGarmentInput) {
     category: input.category,
     color: input.color.trim(),
     brand: input.brand?.trim() || undefined,
+    favorite: false,
     imageId,
     createdAt: now,
     updatedAt: now,

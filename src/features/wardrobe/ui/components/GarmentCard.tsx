@@ -4,6 +4,7 @@ import { Link } from 'react-router'
 import { db } from '../../../../infrastructure/database/db'
 import ClothingIcon from '../../../../shared/components/ClothingIcon'
 import UiIcon from '../../../../shared/components/UiIcon'
+import { toggleGarmentFavorite } from '../../application/toggleGarmentFavorite'
 import type { Garment } from '../../domain/Garment'
 
 const categoryLabels: Record<Garment['category'], string> = {
@@ -27,6 +28,7 @@ interface GarmentCardProps {
 export default function GarmentCard({ garment }: GarmentCardProps) {
   const image = useLiveQuery(() => db.garmentImages.get(garment.imageId), [garment.imageId])
   const [imageUrl, setImageUrl] = useState<string>()
+  const [isFavoriteSaving, setIsFavoriteSaving] = useState(false)
 
   useEffect(() => {
     if (!image?.blob) {
@@ -40,13 +42,26 @@ export default function GarmentCard({ garment }: GarmentCardProps) {
     return () => URL.revokeObjectURL(objectUrl)
   }, [image])
 
+  async function handleFavorite() {
+    if (isFavoriteSaving) return
+
+    setIsFavoriteSaving(true)
+    try {
+      await toggleGarmentFavorite(garment.id)
+    } finally {
+      setIsFavoriteSaving(false)
+    }
+  }
+
+  const isFavorite = Boolean(garment.favorite)
+
   return (
-    <Link
-      to={`/closet/${garment.id}/edit`}
-      className="block transition active:scale-[0.985]"
-      aria-label={`Editar ${garment.name}`}
-    >
-      <article className="overflow-hidden rounded-[20px] border border-black/[0.04] bg-white shadow-[0_8px_24px_rgba(52,36,86,0.06)] transition-colors dark:border-white/[0.07] dark:bg-[#0d1829] dark:shadow-none">
+    <article className="relative overflow-hidden rounded-[20px] border border-black/[0.04] bg-white shadow-[0_8px_24px_rgba(52,36,86,0.06)] transition-colors dark:border-white/[0.07] dark:bg-[#0d1829] dark:shadow-none">
+      <Link
+        to={`/closet/${garment.id}/edit`}
+        className="block transition active:scale-[0.985]"
+        aria-label={`Editar ${garment.name}`}
+      >
         <div className="relative aspect-square bg-gradient-to-br from-violet-50 to-zinc-50 dark:from-violet-500/10 dark:to-[#111c2e]">
           {imageUrl ? (
             <img src={imageUrl} alt={garment.name} className="h-full w-full object-cover" />
@@ -56,7 +71,7 @@ export default function GarmentCard({ garment }: GarmentCardProps) {
             </div>
           )}
 
-          <span className="absolute right-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 text-zinc-700 shadow-sm backdrop-blur dark:bg-[#0d1829]/90 dark:text-slate-200">
+          <span className="absolute left-2.5 top-2.5 flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 text-zinc-700 shadow-sm backdrop-blur dark:bg-[#0d1829]/90 dark:text-slate-200">
             <UiIcon name="pencil" className="h-4 w-4" />
           </span>
         </div>
@@ -68,7 +83,21 @@ export default function GarmentCard({ garment }: GarmentCardProps) {
           </p>
           {garment.brand && <p className="mt-1 truncate text-[10px] text-zinc-400 dark:text-slate-500">{garment.brand}</p>}
         </div>
-      </article>
-    </Link>
+      </Link>
+
+      <button
+        type="button"
+        disabled={isFavoriteSaving}
+        onClick={handleFavorite}
+        aria-label={isFavorite ? `Quitar ${garment.name} de favoritos` : `Agregar ${garment.name} a favoritos`}
+        aria-pressed={isFavorite}
+        className={[
+          'absolute right-2.5 top-2.5 z-10 flex h-8 w-8 items-center justify-center rounded-xl bg-white/90 shadow-sm backdrop-blur transition active:scale-90 disabled:opacity-60 dark:bg-[#0d1829]/90',
+          isFavorite ? 'text-pink-500' : 'text-zinc-500 dark:text-slate-300',
+        ].join(' ')}
+      >
+        <UiIcon name="heart" className={isFavorite ? 'h-4 w-4 fill-current' : 'h-4 w-4'} />
+      </button>
+    </article>
   )
 }
