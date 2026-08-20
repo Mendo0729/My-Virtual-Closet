@@ -31,12 +31,11 @@ services:
     container_name: my-virtual-closet-ai-proxy
 
     working_dir: /app
-    command: ["node", "server/openrouter-proxy.mjs"]
+    command: ["node", "server/gemini-proxy.mjs"]
 
     environment:
-      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
-      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/free}
-      OPENROUTER_SITE_URL: ${OPENROUTER_SITE_URL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
       PORT: "8787"
 
     volumes:
