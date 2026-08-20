@@ -28,6 +28,67 @@ export interface GarmentAnalysisResult {
 }
 
 const REQUEST_TIMEOUT_MS = 35_000
+const ANALYSIS_MAX_DIMENSION = 768
+const ANALYSIS_WEBP_QUALITY = 0.8
+
+function loadImage(source: Blob) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    const objectUrl = URL.createObjectURL(source)
+
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve(image)
+    }
+
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      reject(new Error('No se pudo preparar la imagen para OpenRouter.'))
+    }
+
+    image.src = objectUrl
+  })
+}
+
+function canvasToWebp(canvas: HTMLCanvasElement) {
+  return new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (blob) => {
+        if (blob) {
+          resolve(blob)
+        } else {
+          reject(new Error('No se pudo comprimir la imagen para OpenRouter.'))
+        }
+      },
+      'image/webp',
+      ANALYSIS_WEBP_QUALITY,
+    )
+  })
+}
+
+async function prepareAnalysisImage(source: Blob) {
+  const image = await loadImage(source)
+  const largestSide = Math.max(image.naturalWidth, image.naturalHeight)
+
+  if (largestSide <= ANALYSIS_MAX_DIMENSION && source.type === 'image/webp') {
+    return source
+  }
+
+  const scale = Math.min(1, ANALYSIS_MAX_DIMENSION / Math.max(1, largestSide))
+  const width = Math.max(1, Math.round(image.naturalWidth * scale))
+  const height = Math.max(1, Math.round(image.naturalHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('El navegador no pudo preparar la imagen para OpenRouter.')
+  }
+
+  context.drawImage(image, 0, 0, width, height)
+  return canvasToWebp(canvas)
+}
 
 function blobToDataUrl(blob: Blob) {
   return new Promise<string>((resolve, reject) => {
@@ -51,7 +112,8 @@ export async function analyzeGarmentWithOpenRouter(source: Blob): Promise<Garmen
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
   try {
-    const image = await blobToDataUrl(source)
+    const analysisImage = await prepareAnalysisImage(source)
+    const image = await blobToDataUrl(analysisImage)
     const response = await fetch('/ai/analyze-garment', {
       method: 'POST',
       headers: {
