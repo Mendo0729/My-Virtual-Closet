@@ -1,27 +1,54 @@
 const MAX_IMAGE_DIMENSION = 1400
 const WEBP_QUALITY = 0.86
-const BORDER_SAMPLE_RATIO = 0.045
-const MIN_BORDER_SAMPLE_SIZE = 8
-const MAX_BORDER_SAMPLE_SIZE = 48
-const MAX_BACKGROUND_COLORS = 24
-const COLOR_BIN_SIZE = 32
-const OUTER_BACKGROUND_THRESHOLD = 54
-const CENTER_BACKGROUND_THRESHOLD = 36
-const OUTER_NEIGHBOR_THRESHOLD = 40
-const CENTER_NEIGHBOR_THRESHOLD = 28
-const STRICT_BACKGROUND_THRESHOLD = 24
-const MAX_REJECTED_ATTEMPTS = 4
-const EDGE_BLUR_PASSES = 2
 
-interface RgbColor {
-  r: number
-  g: number
+const CORNER_SAMPLE_RATIO = 0.07
+const MIN_CORNER_SAMPLE_SIZE = 12
+const MAX_CORNER_SAMPLE_SIZE = 72
+const SAMPLE_STEP = 2
+
+const SEED_BACKGROUND_DISTANCE = 14
+const OUTER_BACKGROUND_DISTANCE = 22
+const CENTER_BACKGROUND_DISTANCE = 10
+const OUTER_NEIGHBOR_DISTANCE = 16
+const CENTER_NEIGHBOR_DISTANCE = 9
+const SURE_BACKGROUND_DISTANCE = 6
+const EDGE_BARRIER = 28
+const MAX_BACKGROUND_VARIATION_BONUS = 8
+const MAX_REJECTED_ATTEMPTS = 4
+
+const MIN_FOREGROUND_COMPONENT_PIXELS = 18
+const MIN_FOREGROUND_COMPONENT_RATIO = 0.00012
+const EDGE_FEATHER_PASSES = 1
+
+interface LabColor {
+  l: number
+  a: number
   b: number
 }
 
-interface ColorBucket extends RgbColor {
-  count: number
+interface BackgroundModel extends LabColor {
+  deviation: number
 }
+
+interface CanvasImage {
+  canvas: HTMLCanvasElement
+  context: CanvasRenderingContext2D
+  width: number
+  height: number
+}
+
+const SRGB_LINEAR = (() => {
+  const table = new Float32Array(256)
+
+  for (let value = 0; value < 256; value += 1) {
+    const normalized = value / 255
+    table[value] = normalized <= 0.04045
+      ? normalized / 12.92
+      : Math.pow((normalized + 0.055) / 1.055, 2.4)
+  }
+
+  return table
+})()
 
 function loadImage(file: Blob) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -42,7 +69,7 @@ function loadImage(file: Blob) {
   })
 }
 
-function createCanvas(image: HTMLImageElement) {
+function createCanvas(image: HTMLImageElement): CanvasImage {
   const largestSide = Math.max(image.naturalWidth, image.naturalHeight)
   const scale = largestSide > MAX_IMAGE_DIMENSION ? MAX_IMAGE_DIMENSION / largestSide : 1
 
@@ -64,7 +91,12 @@ function createCanvas(image: HTMLImageElement) {
   return { canvas, context, width, height }
 }
 
-function canvasToWebp(canvas: HTMLCanvasElement, errorMessage: string) {
+function canvasToBlob(
+  canvas: HTMLCanvasElement,
+  mimeType: 'image/webp' | 'image/png',
+  errorMessage: string,
+  quality?: number,
+) {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
@@ -75,90 +107,200 @@ function canvasToWebp(canvas: HTMLCanvasElement, errorMessage: string) {
 
         resolve(blob)
       },
-      'image/webp',
-      WEBP_QUALITY,
+      mimeType,
+      quality,
     )
   })
 }
 
-function colorDistance(r: number, g: number, b: number, color: RgbColor) {
-  const red = r - color.r
-  const green = g - color.g
-  const blue = b - color.b
-
-  return Math.sqrt(red * red + green * green + blue * blue)
-}
-
-function collectBackgroundPalette(data: Uint8ClampedArray, width: number, height: number) {
-  const borderSize = Math.max(
-    MIN_BORDER_SAMPLE_SIZE,
-    Math.min(MAX_BORDER_SAMPLE_SIZE, Math.round(Math.min(width, height) * BORDER_SAMPLE_RATIO)),
-  )
-  const buckets = new Map<number, ColorBucket>()
-
-  function addPixel(x: number, y: number) {
-    const offset = (y * width + x) * 4
-
-    if (data[offset + 3] === 0) {
-      return
-    }
-
-    const r = data[offset]
-    const g = data[offset + 1]
-    const b = data[offset + 2]
-    const rBin = Math.floor(r / COLOR_BIN_SIZE)
-    const gBin = Math.floor(g / COLOR_BIN_SIZE)
-    const bBin = Math.floor(b / COLOR_BIN_SIZE)
-    const key = (rBin << 6) | (gBin << 3) | bBin
-    const bucket = buckets.get(key)
-
-    if (bucket) {
-      bucket.r += r
-      bucket.g += g
-      bucket.b += b
-      bucket.count += 1
-      return
-    }
-
-    buckets.set(key, { r, g, b, count: 1 })
+function median(values: number[]) {
+  if (values.length === 0) {
+    return 0
   }
 
-  for (let y = 0; y < height; y += 2) {
-    for (let x = 0; x < width; x += 2) {
-      if (x < borderSize || x >= width - borderSize || y < borderSize || y >= height - borderSize) {
-        addPixel(x, y)
+  values.sort((left, right) => left - right)
+  const middle = Math.floor(values.length / 2)
+
+  if (values.length % 2 === 0) {
+    return (values[middle - 1] + values[middle]) / 2
+  }
+
+  return values[middle]
+}
+
+function rgbToLab(r: number, g: number, b: number): LabColor {
+  const red = SRGB_LINEAR[r]
+  const green = SRGB_LINEAR[g]
+  const blue = SRGB_LINEAR[b]
+
+  const x = (red * 0.4124564 + green * 0.3575761 + blue * 0.1804375) / 0.95047
+  const y = red * 0.2126729 + green * 0.7151522 + blue * 0.072175
+  const z = (red * 0.0193339 + green * 0.119192 + blue * 0.9503041) / 1.08883
+
+  const delta = 6 / 29
+  const deltaCubed = delta * delta * delta
+  const denominator = 3 * delta * delta
+
+  const convert = (value: number) => value > deltaCubed
+    ? Math.cbrt(value)
+    : value / denominator + 4 / 29
+
+  const fx = convert(x)
+  const fy = convert(y)
+  const fz = convert(z)
+
+  return {
+    l: 116 * fy - 16,
+    a: 500 * (fx - fy),
+    b: 200 * (fy - fz),
+  }
+}
+
+function createLabBuffer(data: Uint8ClampedArray) {
+  const pixelCount = data.length / 4
+  const lab = new Float32Array(pixelCount * 3)
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    const offset = pixelIndex * 4
+    const color = rgbToLab(data[offset], data[offset + 1], data[offset + 2])
+    const labOffset = pixelIndex * 3
+    lab[labOffset] = color.l
+    lab[labOffset + 1] = color.a
+    lab[labOffset + 2] = color.b
+  }
+
+  return lab
+}
+
+function labDistance(
+  l: number,
+  a: number,
+  b: number,
+  otherL: number,
+  otherA: number,
+  otherB: number,
+) {
+  const deltaL = l - otherL
+  const deltaA = a - otherA
+  const deltaB = b - otherB
+
+  return Math.sqrt(deltaL * deltaL + deltaA * deltaA + deltaB * deltaB)
+}
+
+function createBackgroundModels(lab: Float32Array, width: number, height: number) {
+  const sampleSize = Math.max(
+    MIN_CORNER_SAMPLE_SIZE,
+    Math.min(MAX_CORNER_SAMPLE_SIZE, Math.round(Math.min(width, height) * CORNER_SAMPLE_RATIO)),
+  )
+
+  const corners = [
+    { startX: 0, startY: 0 },
+    { startX: Math.max(0, width - sampleSize), startY: 0 },
+    { startX: 0, startY: Math.max(0, height - sampleSize) },
+    { startX: Math.max(0, width - sampleSize), startY: Math.max(0, height - sampleSize) },
+  ]
+
+  const models: BackgroundModel[] = []
+
+  for (const corner of corners) {
+    const lightness: number[] = []
+    const greenRed: number[] = []
+    const blueYellow: number[] = []
+
+    for (let y = corner.startY; y < Math.min(height, corner.startY + sampleSize); y += SAMPLE_STEP) {
+      for (let x = corner.startX; x < Math.min(width, corner.startX + sampleSize); x += SAMPLE_STEP) {
+        const labOffset = (y * width + x) * 3
+        lightness.push(lab[labOffset])
+        greenRed.push(lab[labOffset + 1])
+        blueYellow.push(lab[labOffset + 2])
       }
     }
+
+    const model: BackgroundModel = {
+      l: median(lightness),
+      a: median(greenRed),
+      b: median(blueYellow),
+      deviation: 0,
+    }
+
+    const deviations: number[] = []
+
+    for (let index = 0; index < lightness.length; index += 1) {
+      deviations.push(
+        labDistance(
+          lightness[index],
+          greenRed[index],
+          blueYellow[index],
+          model.l,
+          model.a,
+          model.b,
+        ),
+      )
+    }
+
+    model.deviation = median(deviations)
+    models.push(model)
   }
 
-  const palette = Array.from(buckets.values())
-    .sort((left, right) => right.count - left.count)
-    .slice(0, MAX_BACKGROUND_COLORS)
-    .map((bucket) => ({
-      r: bucket.r / bucket.count,
-      g: bucket.g / bucket.count,
-      b: bucket.b / bucket.count,
-    }))
-
-  if (palette.length > 0) {
-    return palette
-  }
-
-  return [{ r: 255, g: 255, b: 255 }]
+  return models
 }
 
-function nearestPaletteDistance(r: number, g: number, b: number, palette: RgbColor[]) {
-  let nearestDistance = Number.POSITIVE_INFINITY
+function nearestBackgroundDistance(
+  lab: Float32Array,
+  pixelIndex: number,
+  models: BackgroundModel[],
+) {
+  const labOffset = pixelIndex * 3
+  const l = lab[labOffset]
+  const a = lab[labOffset + 1]
+  const b = lab[labOffset + 2]
+  let nearest = Number.POSITIVE_INFINITY
 
-  for (const color of palette) {
-    const distance = colorDistance(r, g, b, color)
+  for (const model of models) {
+    const distance = labDistance(l, a, b, model.l, model.a, model.b)
+    nearest = Math.min(nearest, distance)
+  }
 
-    if (distance < nearestDistance) {
-      nearestDistance = distance
+  return nearest
+}
+
+function createBackgroundDistanceMap(
+  lab: Float32Array,
+  pixelCount: number,
+  models: BackgroundModel[],
+) {
+  const distances = new Float32Array(pixelCount)
+
+  for (let pixelIndex = 0; pixelIndex < pixelCount; pixelIndex += 1) {
+    distances[pixelIndex] = nearestBackgroundDistance(lab, pixelIndex, models)
+  }
+
+  return distances
+}
+
+function createEdgeMap(lab: Float32Array, width: number, height: number) {
+  const edges = new Float32Array(width * height)
+
+  const lightnessAt = (x: number, y: number) => lab[(y * width + x) * 3]
+
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const topLeft = lightnessAt(x - 1, y - 1)
+      const top = lightnessAt(x, y - 1)
+      const topRight = lightnessAt(x + 1, y - 1)
+      const left = lightnessAt(x - 1, y)
+      const right = lightnessAt(x + 1, y)
+      const bottomLeft = lightnessAt(x - 1, y + 1)
+      const bottom = lightnessAt(x, y + 1)
+      const bottomRight = lightnessAt(x + 1, y + 1)
+
+      const gradientX = -topLeft + topRight - 2 * left + 2 * right - bottomLeft + bottomRight
+      const gradientY = -topLeft - 2 * top - topRight + bottomLeft + 2 * bottom + bottomRight
+      edges[y * width + x] = Math.sqrt(gradientX * gradientX + gradientY * gradientY)
     }
   }
 
-  return nearestDistance
+  return edges
 }
 
 function centerStrength(x: number, y: number, width: number, height: number) {
@@ -169,11 +311,27 @@ function centerStrength(x: number, y: number, width: number, height: number) {
   return Math.max(0, Math.min(1, 1 - edgeDistance))
 }
 
+function pixelLabDistance(lab: Float32Array, leftIndex: number, rightIndex: number) {
+  const leftOffset = leftIndex * 3
+  const rightOffset = rightIndex * 3
+
+  return labDistance(
+    lab[leftOffset],
+    lab[leftOffset + 1],
+    lab[leftOffset + 2],
+    lab[rightOffset],
+    lab[rightOffset + 1],
+    lab[rightOffset + 2],
+  )
+}
+
 function connectedBackgroundMask(
-  data: Uint8ClampedArray,
+  lab: Float32Array,
+  backgroundDistances: Float32Array,
+  edgeMap: Float32Array,
+  models: BackgroundModel[],
   width: number,
   height: number,
-  palette: RgbColor[],
 ) {
   const pixelCount = width * height
   const background = new Uint8Array(pixelCount)
@@ -182,10 +340,15 @@ function connectedBackgroundMask(
   let head = 0
   let tail = 0
 
-  function seed(x: number, y: number) {
-    const pixelIndex = y * width + x
+  const backgroundVariation = Math.min(
+    MAX_BACKGROUND_VARIATION_BONUS,
+    median(models.map((model) => model.deviation)) * 1.5,
+  )
 
-    if (background[pixelIndex]) {
+  const seedThreshold = SEED_BACKGROUND_DISTANCE + backgroundVariation * 0.55
+
+  function seed(pixelIndex: number) {
+    if (background[pixelIndex] || backgroundDistances[pixelIndex] > seedThreshold) {
       return
     }
 
@@ -195,54 +358,39 @@ function connectedBackgroundMask(
   }
 
   for (let x = 0; x < width; x += 1) {
-    seed(x, 0)
-    seed(x, height - 1)
+    seed(x)
+    seed((height - 1) * width + x)
   }
 
   for (let y = 1; y < height - 1; y += 1) {
-    seed(0, y)
-    seed(width - 1, y)
+    seed(y * width)
+    seed(y * width + width - 1)
   }
 
   function tryEnqueue(pixelIndex: number, fromPixelIndex: number) {
-    if (pixelIndex < 0 || pixelIndex >= pixelCount || background[pixelIndex]) {
-      return
-    }
-
-    if (rejectedAttempts[pixelIndex] >= MAX_REJECTED_ATTEMPTS) {
+    if (background[pixelIndex] || rejectedAttempts[pixelIndex] >= MAX_REJECTED_ATTEMPTS) {
       return
     }
 
     const x = pixelIndex % width
     const y = Math.floor(pixelIndex / width)
-    const offset = pixelIndex * 4
-    const fromOffset = fromPixelIndex * 4
-
-    if (data[offset + 3] === 0) {
-      background[pixelIndex] = 1
-      queue[tail] = pixelIndex
-      tail += 1
-      return
-    }
-
-    const paletteDistance = nearestPaletteDistance(data[offset], data[offset + 1], data[offset + 2], palette)
-    const neighborDistance = colorDistance(
-      data[offset],
-      data[offset + 1],
-      data[offset + 2],
-      {
-        r: data[fromOffset],
-        g: data[fromOffset + 1],
-        b: data[fromOffset + 2],
-      },
-    )
     const center = centerStrength(x, y, width, height)
-    const paletteThreshold = OUTER_BACKGROUND_THRESHOLD - center * (OUTER_BACKGROUND_THRESHOLD - CENTER_BACKGROUND_THRESHOLD)
-    const neighborThreshold = OUTER_NEIGHBOR_THRESHOLD - center * (OUTER_NEIGHBOR_THRESHOLD - CENTER_NEIGHBOR_THRESHOLD)
-    const isStrictBackground = paletteDistance <= STRICT_BACKGROUND_THRESHOLD
-    const followsBackground = paletteDistance <= paletteThreshold && neighborDistance <= neighborThreshold
+    const backgroundThreshold =
+      OUTER_BACKGROUND_DISTANCE + backgroundVariation -
+      center * (OUTER_BACKGROUND_DISTANCE - CENTER_BACKGROUND_DISTANCE + backgroundVariation * 0.55)
+    const neighborThreshold =
+      OUTER_NEIGHBOR_DISTANCE + backgroundVariation * 0.35 -
+      center * (OUTER_NEIGHBOR_DISTANCE - CENTER_NEIGHBOR_DISTANCE + backgroundVariation * 0.2)
 
-    if (!isStrictBackground && !followsBackground) {
+    const backgroundDistance = backgroundDistances[pixelIndex]
+    const neighborDistance = pixelLabDistance(lab, pixelIndex, fromPixelIndex)
+    const crossesStrongEdge = edgeMap[pixelIndex] > EDGE_BARRIER && backgroundDistance > SURE_BACKGROUND_DISTANCE
+
+    if (
+      backgroundDistance > backgroundThreshold ||
+      neighborDistance > neighborThreshold ||
+      crossesStrongEdge
+    ) {
       rejectedAttempts[pixelIndex] += 1
       return
     }
@@ -259,103 +407,96 @@ function connectedBackgroundMask(
     const x = pixelIndex % width
     const y = Math.floor(pixelIndex / width)
 
-    if (x > 0) {
-      tryEnqueue(pixelIndex - 1, pixelIndex)
+    if (x > 0) tryEnqueue(pixelIndex - 1, pixelIndex)
+    if (x + 1 < width) tryEnqueue(pixelIndex + 1, pixelIndex)
+    if (y > 0) tryEnqueue(pixelIndex - width, pixelIndex)
+    if (y + 1 < height) tryEnqueue(pixelIndex + width, pixelIndex)
+  }
+
+  return background
+}
+
+function removeForegroundSpecks(background: Uint8Array, width: number, height: number) {
+  const pixelCount = width * height
+  const visited = new Uint8Array(pixelCount)
+  const queue = new Int32Array(pixelCount)
+  const component = new Int32Array(pixelCount)
+  const minimumComponentSize = Math.max(
+    MIN_FOREGROUND_COMPONENT_PIXELS,
+    Math.round(pixelCount * MIN_FOREGROUND_COMPONENT_RATIO),
+  )
+
+  for (let startIndex = 0; startIndex < pixelCount; startIndex += 1) {
+    if (background[startIndex] || visited[startIndex]) {
+      continue
     }
-    if (x + 1 < width) {
-      tryEnqueue(pixelIndex + 1, pixelIndex)
+
+    let head = 0
+    let tail = 0
+    let componentSize = 0
+
+    visited[startIndex] = 1
+    queue[tail] = startIndex
+    tail += 1
+
+    while (head < tail) {
+      const pixelIndex = queue[head]
+      head += 1
+      component[componentSize] = pixelIndex
+      componentSize += 1
+
+      const x = pixelIndex % width
+      const y = Math.floor(pixelIndex / width)
+      const neighbors = [
+        x > 0 ? pixelIndex - 1 : -1,
+        x + 1 < width ? pixelIndex + 1 : -1,
+        y > 0 ? pixelIndex - width : -1,
+        y + 1 < height ? pixelIndex + width : -1,
+      ]
+
+      for (const neighbor of neighbors) {
+        if (neighbor < 0 || background[neighbor] || visited[neighbor]) {
+          continue
+        }
+
+        visited[neighbor] = 1
+        queue[tail] = neighbor
+        tail += 1
+      }
     }
-    if (y > 0) {
-      tryEnqueue(pixelIndex - width, pixelIndex)
+
+    if (componentSize >= minimumComponentSize) {
+      continue
     }
-    if (y + 1 < height) {
-      tryEnqueue(pixelIndex + width, pixelIndex)
+
+    for (let index = 0; index < componentSize; index += 1) {
+      background[component[index]] = 1
     }
   }
 
   return background
 }
 
-function expandBackgroundMask(
-  background: Uint8Array,
-  data: Uint8ClampedArray,
-  width: number,
-  height: number,
-  palette: RgbColor[],
-) {
-  const expanded = background.slice()
+function closeTinyMaskGaps(background: Uint8Array, width: number, height: number) {
+  const cleaned = background.slice()
 
   for (let y = 1; y < height - 1; y += 1) {
     for (let x = 1; x < width - 1; x += 1) {
       const pixelIndex = y * width + x
-
-      if (background[pixelIndex]) {
-        continue
-      }
-
-      let backgroundNeighbors = 0
-
-      for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
-        for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-          if (offsetX === 0 && offsetY === 0) {
-            continue
-          }
-
-          if (background[(y + offsetY) * width + x + offsetX]) {
-            backgroundNeighbors += 1
-          }
-        }
-      }
-
-      if (backgroundNeighbors < 6) {
-        continue
-      }
-
-      const offset = pixelIndex * 4
-      const paletteDistance = nearestPaletteDistance(data[offset], data[offset + 1], data[offset + 2], palette)
-      const center = centerStrength(x, y, width, height)
-      const threshold = OUTER_BACKGROUND_THRESHOLD + 8 - center * 12
-
-      if (paletteDistance <= threshold) {
-        expanded[pixelIndex] = 1
-      }
-    }
-  }
-
-  return expanded
-}
-
-function createAlphaMask(background: Uint8Array) {
-  const alpha = new Uint8ClampedArray(background.length)
-
-  for (let index = 0; index < background.length; index += 1) {
-    alpha[index] = background[index] ? 0 : 255
-  }
-
-  return alpha
-}
-
-function despeckleAlpha(alpha: Uint8ClampedArray, width: number, height: number) {
-  const cleaned = alpha.slice()
-
-  for (let y = 1; y < height - 1; y += 1) {
-    for (let x = 1; x < width - 1; x += 1) {
       let foregroundNeighbors = 0
 
       for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
         for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-          if (alpha[(y + offsetY) * width + x + offsetX] >= 128) {
+          if (!background[(y + offsetY) * width + x + offsetX]) {
             foregroundNeighbors += 1
           }
         }
       }
 
-      const pixelIndex = y * width + x
-
-      if (foregroundNeighbors <= 2) {
+      if (background[pixelIndex] && foregroundNeighbors >= 7) {
         cleaned[pixelIndex] = 0
-      } else if (foregroundNeighbors >= 7) {
-        cleaned[pixelIndex] = 255
+      } else if (!background[pixelIndex] && foregroundNeighbors <= 2) {
+        cleaned[pixelIndex] = 1
       }
     }
   }
@@ -363,11 +504,15 @@ function despeckleAlpha(alpha: Uint8ClampedArray, width: number, height: number)
   return cleaned
 }
 
-function blurAlpha(alpha: Uint8ClampedArray, width: number, height: number) {
-  let current = alpha
+function createAlphaMask(background: Uint8Array, width: number, height: number) {
+  let alpha = new Uint8ClampedArray(background.length)
 
-  for (let pass = 0; pass < EDGE_BLUR_PASSES; pass += 1) {
-    const blurred = current.slice()
+  for (let index = 0; index < background.length; index += 1) {
+    alpha[index] = background[index] ? 0 : 255
+  }
+
+  for (let pass = 0; pass < EDGE_FEATHER_PASSES; pass += 1) {
+    const feathered = alpha.slice()
 
     for (let y = 1; y < height - 1; y += 1) {
       for (let x = 1; x < width - 1; x += 1) {
@@ -378,25 +523,23 @@ function blurAlpha(alpha: Uint8ClampedArray, width: number, height: number) {
 
         for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
           for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
-            const value = current[(y + offsetY) * width + x + offsetX]
+            const value = alpha[(y + offsetY) * width + x + offsetX]
             minimum = Math.min(minimum, value)
             maximum = Math.max(maximum, value)
             sum += value
           }
         }
 
-        if (minimum === maximum) {
-          continue
+        if (minimum !== maximum) {
+          feathered[pixelIndex] = Math.round(sum / 9)
         }
-
-        blurred[pixelIndex] = Math.round(sum / 9)
       }
     }
 
-    current = blurred
+    alpha = feathered
   }
 
-  return current
+  return alpha
 }
 
 function decontaminateEdgeColors(
@@ -460,21 +603,37 @@ export async function processGarmentImage(file: File): Promise<Blob> {
   const image = await loadImage(file)
   const { canvas } = createCanvas(image)
 
-  return canvasToWebp(canvas, 'No se pudo optimizar la imagen.')
+  return canvasToBlob(canvas, 'image/webp', 'No se pudo optimizar la imagen.', WEBP_QUALITY)
 }
 
 export async function removeGarmentBackground(source: Blob): Promise<Blob> {
   const image = await loadImage(source)
   const { canvas, context, width, height } = createCanvas(image)
   const imageData = context.getImageData(0, 0, width, height)
-  const palette = collectBackgroundPalette(imageData.data, width, height)
-  const connectedBackground = connectedBackgroundMask(imageData.data, width, height, palette)
-  const expandedBackground = expandBackgroundMask(connectedBackground, imageData.data, width, height, palette)
-  const alpha = blurAlpha(despeckleAlpha(createAlphaMask(expandedBackground), width, height), width, height)
+  const pixelCount = width * height
+
+  const lab = createLabBuffer(imageData.data)
+  const backgroundModels = createBackgroundModels(lab, width, height)
+  const backgroundDistances = createBackgroundDistanceMap(lab, pixelCount, backgroundModels)
+  const edgeMap = createEdgeMap(lab, width, height)
+  const connectedBackground = connectedBackgroundMask(
+    lab,
+    backgroundDistances,
+    edgeMap,
+    backgroundModels,
+    width,
+    height,
+  )
+  const cleanedBackground = closeTinyMaskGaps(
+    removeForegroundSpecks(connectedBackground, width, height),
+    width,
+    height,
+  )
+  const alpha = createAlphaMask(cleanedBackground, width, height)
 
   decontaminateEdgeColors(imageData.data, alpha, width, height)
   applyAlpha(imageData.data, alpha)
   context.putImageData(imageData, 0, 0)
 
-  return canvasToWebp(canvas, 'No se pudo quitar el fondo de la imagen.')
+  return canvasToBlob(canvas, 'image/png', 'No se pudo quitar el fondo de la imagen.')
 }
