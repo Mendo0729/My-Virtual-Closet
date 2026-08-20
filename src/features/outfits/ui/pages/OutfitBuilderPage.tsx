@@ -6,7 +6,7 @@ import ClothingIcon, { type ClothingIconKind } from '../../../../shared/componen
 import UiIcon from '../../../../shared/components/UiIcon'
 import type { Garment } from '../../../wardrobe/domain/Garment'
 import { createOutfit } from '../../application/createOutfit'
-import type { OutfitSlot } from '../../domain/Outfit'
+import type { OutfitCategory, OutfitSlot } from '../../domain/Outfit'
 import GarmentImage from '../components/GarmentImage'
 
 const slotDefinitions: Array<{ slot: OutfitSlot; label: string; icon: ClothingIconKind }> = [
@@ -14,6 +14,13 @@ const slotDefinitions: Array<{ slot: OutfitSlot; label: string; icon: ClothingIc
   { slot: 'bottom', label: 'Bottoms', icon: 'bottom' },
   { slot: 'shoes', label: 'Calzado', icon: 'shoes' },
   { slot: 'accessory', label: 'Accesorios', icon: 'accessory' },
+]
+
+const categoryOptions: Array<{ value: OutfitCategory; label: string }> = [
+  { value: 'casual', label: 'Casual' },
+  { value: 'trabajo', label: 'Trabajo' },
+  { value: 'noche', label: 'Noche' },
+  { value: 'deporte', label: 'Deporte' },
 ]
 
 const initialIndexes: Record<OutfitSlot, number> = {
@@ -30,6 +37,7 @@ export default function OutfitBuilderPage() {
   const [activeSlot, setActiveSlot] = useState<OutfitSlot>('top')
   const [isSaveOpen, setIsSaveOpen] = useState(false)
   const [lookName, setLookName] = useState('')
+  const [lookCategory, setLookCategory] = useState<OutfitCategory>('casual')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -103,6 +111,7 @@ export default function OutfitBuilderPage() {
     try {
       await createOutfit({
         name: lookName,
+        category: lookCategory,
         items: selectedItems.map(({ slot, garment }, position) => ({
           garmentId: garment.id,
           slot,
@@ -297,7 +306,7 @@ export default function OutfitBuilderPage() {
             </h2>
 
             <p className="mt-1 text-xs leading-5 text-zinc-500 dark:text-slate-400">
-              Ponle un nombre o déjalo vacío para generar uno automáticamente.
+              Ponle un nombre, elige una categoría y guarda tu combinación.
             </p>
 
             <form onSubmit={handleSave} className="mt-5">
@@ -313,6 +322,31 @@ export default function OutfitBuilderPage() {
                 autoFocus
                 className="mt-1.5 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-sm outline-none focus:border-violet-400 dark:border-white/10 dark:bg-[#111c2e] dark:text-white"
               />
+
+              <fieldset className="mt-4">
+                <legend className="text-xs font-bold text-zinc-700 dark:text-slate-300">Categoría</legend>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  {categoryOptions.map((option) => {
+                    const active = lookCategory === option.value
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setLookCategory(option.value)}
+                        className={[
+                          'rounded-2xl border px-3 py-2.5 text-xs font-extrabold transition',
+                          active
+                            ? 'border-violet-500 bg-violet-50 text-violet-700 dark:border-fuchsia-400 dark:bg-violet-500/15 dark:text-fuchsia-300'
+                            : 'border-zinc-200 bg-white text-zinc-500 dark:border-white/10 dark:bg-[#111c2e] dark:text-slate-400',
+                        ].join(' ')}
+                        aria-pressed={active}
+                      >
+                        {option.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </fieldset>
 
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <button
