@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { createGarment } from '../../application/createGarment'
 import type { GarmentCategory } from '../../domain/Garment'
-import { processGarmentImage } from '../../../../infrastructure/storage/imageProcessor'
+import { processGarmentImage, removeGarmentBackground } from '../../../../infrastructure/storage/imageProcessor'
 import UiIcon from '../../../../shared/components/UiIcon'
 import ImagePicker from '../components/ImagePicker'
 
@@ -13,6 +13,14 @@ const categoryOptions: Array<{ value: GarmentCategory; label: string }> = [
   { value: 'accessory', label: 'Accesorio' },
 ]
 
+const transparentPreviewStyle = {
+  backgroundColor: '#f4f4f5',
+  backgroundImage:
+    'linear-gradient(45deg, #e4e4e7 25%, transparent 25%), linear-gradient(-45deg, #e4e4e7 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #e4e4e7 75%), linear-gradient(-45deg, transparent 75%, #e4e4e7 75%)',
+  backgroundPosition: '0 0, 0 8px, 8px -8px, -8px 0px',
+  backgroundSize: '16px 16px',
+}
+
 export default function AddGarmentPage() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
@@ -20,8 +28,11 @@ export default function AddGarmentPage() {
   const [color, setColor] = useState('')
   const [brand, setBrand] = useState('')
   const [image, setImage] = useState<Blob>()
+  const [originalImage, setOriginalImage] = useState<Blob>()
   const [previewUrl, setPreviewUrl] = useState<string>()
+  const [isBackgroundRemoved, setIsBackgroundRemoved] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [processingLabel, setProcessingLabel] = useState('Optimizando imagen…')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -45,15 +56,48 @@ export default function AddGarmentPage() {
 
     setError(undefined)
     setIsProcessing(true)
+    setProcessingLabel('Optimizando imagen…')
+    setIsBackgroundRemoved(false)
 
     try {
       const processedImage = await processGarmentImage(file)
+      setOriginalImage(processedImage)
       setImage(processedImage)
     } catch (imageError) {
       setError(imageError instanceof Error ? imageError.message : 'No se pudo procesar la imagen.')
     } finally {
       setIsProcessing(false)
     }
+  }
+
+  async function handleRemoveBackground() {
+    if (!originalImage) {
+      return
+    }
+
+    setError(undefined)
+    setIsProcessing(true)
+    setProcessingLabel('Quitando fondo…')
+
+    try {
+      const transparentImage = await removeGarmentBackground(originalImage)
+      setImage(transparentImage)
+      setIsBackgroundRemoved(true)
+    } catch (imageError) {
+      setError(imageError instanceof Error ? imageError.message : 'No se pudo quitar el fondo de la imagen.')
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  function handleRestoreOriginal() {
+    if (!originalImage) {
+      return
+    }
+
+    setError(undefined)
+    setImage(originalImage)
+    setIsBackgroundRemoved(false)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -105,7 +149,15 @@ export default function AddGarmentPage() {
       <form onSubmit={handleSubmit} className="pb-6">
         <section className="mt-5 rounded-[26px] border border-violet-200/70 bg-gradient-to-br from-violet-50 via-white to-pink-50 p-4 text-center shadow-sm dark:border-violet-500/15 dark:from-violet-500/10 dark:via-[#0d1829] dark:to-pink-500/10">
           {previewUrl ? (
-            <div className="overflow-hidden rounded-[20px] bg-white dark:bg-[#111c2e]">
+            <div
+              className={`relative overflow-hidden rounded-[20px] ${isBackgroundRemoved ? '' : 'bg-white dark:bg-[#111c2e]'}`}
+              style={isBackgroundRemoved ? transparentPreviewStyle : undefined}
+            >
+              {isBackgroundRemoved && (
+                <span className="absolute right-3 top-3 z-10 rounded-full bg-zinc-950/70 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
+                  Fondo transparente
+                </span>
+              )}
               <img src={previewUrl} alt="Vista previa de la prenda" className="aspect-square w-full object-contain" />
             </div>
           ) : (
@@ -118,9 +170,45 @@ export default function AddGarmentPage() {
             </div>
           )}
 
-          {isProcessing && <p className="mt-4 text-sm font-bold text-violet-600 dark:text-fuchsia-300">Optimizando imagen…</p>}
+          {isProcessing && (
+            <p className="mt-4 text-sm font-bold text-violet-600 dark:text-fuchsia-300" role="status">
+              {processingLabel}
+            </p>
+          )}
 
           <ImagePicker onSelect={handleImageSelected} disabled={isProcessing || isSaving} />
+
+          {image && originalImage && (
+            <div className="mt-3">
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={handleRemoveBackground}
+                  disabled={isProcessing || isSaving}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-4 py-3 text-xs font-extrabold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-950"
+                >
+                  <UiIcon name="sparkles" className="h-4 w-4" />
+                  {isBackgroundRemoved ? 'Recortar de nuevo' : 'Quitar fondo'}
+                </button>
+
+                {isBackgroundRemoved && (
+                  <button
+                    type="button"
+                    onClick={handleRestoreOriginal}
+                    disabled={isProcessing || isSaving}
+                    className="rounded-2xl border border-zinc-200 bg-white px-4 py-3 text-xs font-extrabold text-zinc-700 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-[#111c2e] dark:text-slate-200"
+                  >
+                    Usar original
+                  </button>
+                )}
+              </div>
+              <p className="mt-2 px-2 text-[11px] leading-4 text-zinc-500 dark:text-slate-400">
+                {isBackgroundRemoved
+                  ? 'El recorte se guardará con transparencia. Puedes volver a la foto original antes de guardar.'
+                  : 'Beta: funciona mejor cuando la prenda está completa sobre un fondo liso y con buen contraste.'}
+              </p>
+            </div>
+          )}
         </section>
 
         {image && (
@@ -147,7 +235,7 @@ export default function AddGarmentPage() {
 
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || isProcessing}
               className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-pink-500 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-pink-500/15 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSaving ? 'Guardando…' : 'Guardar prenda'}
@@ -168,7 +256,7 @@ export default function AddGarmentPage() {
               <p className="text-sm font-extrabold text-zinc-900 dark:text-white">Tips para una mejor foto</p>
             </div>
             <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-500 dark:text-slate-400">
-              <li>• Usa un fondo limpio.</li>
+              <li>• Usa un fondo liso que contraste con la prenda.</li>
               <li>• Procura tener buena iluminación.</li>
               <li>• Asegúrate de que toda la prenda sea visible.</li>
             </ul>
