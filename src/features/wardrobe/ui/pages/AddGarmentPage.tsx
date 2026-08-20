@@ -29,6 +29,7 @@ export default function AddGarmentPage() {
   const [brand, setBrand] = useState('')
   const [image, setImage] = useState<Blob>()
   const [originalImage, setOriginalImage] = useState<Blob>()
+  const [cutoutSource, setCutoutSource] = useState<Blob>()
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [isBackgroundRemoved, setIsBackgroundRemoved] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -61,6 +62,7 @@ export default function AddGarmentPage() {
 
     try {
       const processedImage = await processGarmentImage(file)
+      setCutoutSource(file)
       setOriginalImage(processedImage)
       setImage(processedImage)
     } catch (imageError) {
@@ -71,16 +73,18 @@ export default function AddGarmentPage() {
   }
 
   async function handleRemoveBackground() {
-    if (!originalImage) {
+    const source = cutoutSource ?? originalImage
+
+    if (!source) {
       return
     }
 
     setError(undefined)
     setIsProcessing(true)
-    setProcessingLabel('Quitando fondo…')
+    setProcessingLabel('Analizando prenda y fondo…')
 
     try {
-      const transparentImage = await removeGarmentBackground(originalImage)
+      const transparentImage = await removeGarmentBackground(source)
       setImage(transparentImage)
       setIsBackgroundRemoved(true)
     } catch (imageError) {
