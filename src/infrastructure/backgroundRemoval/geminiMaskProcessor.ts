@@ -1,7 +1,9 @@
 import type { GeminiGarmentSegmentation } from './geminiClient'
 
 const GEMINI_COORDINATE_SCALE = 1000
-const CROP_PADDING_RATIO = 0.05
+const CROP_PADDING_RATIO = 0.18
+const MINIMUM_PADDING = 45
+const GUIDED_SOURCE_QUALITY = 0.92
 
 function loadImage(source: Blob) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -15,24 +17,25 @@ function loadImage(source: Blob) {
 
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl)
-      reject(new Error('No se pudo leer la imagen para aplicar la máscara de Gemini.'))
+      reject(new Error('No se pudo leer la imagen para aplicar la guía de Gemini.'))
     }
 
     image.src = objectUrl
   })
 }
 
-function canvasToPng(canvas: HTMLCanvasElement) {
+function canvasToBlob(canvas: HTMLCanvasElement) {
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
       (blob) => {
         if (blob) {
           resolve(blob)
         } else {
-          reject(new Error('No se pudo generar la imagen transparente.'))
+          reject(new Error('No se pudo preparar la imagen guiada por Gemini.'))
         }
       },
-      'image/png',
+      'image/webp',
+      GUIDED_SOURCE_QUALITY,
     )
   })
 }
@@ -54,92 +57,85 @@ function fullImageMaskPoint(
   }
 }
 
-export async function applyGeminiGarmentMask(
+/**
+ * Gemini does not perform the final cutout here.
+ *
+ * Its semantic segmentation is used only to locate the garment and build a
+ * smaller, background-rich region of interest. The classical local algorithm
+ * receives this region afterwards and is responsible for calculating the
+ * actual alpha mask and final garment edges.
+ */
+export async function prepareGeminiGuidedSource(
   source: Blob,
   segmentation: GeminiGarmentSegmentation,
 ): Promise<Blob> {
-  if (!Array.isArray(segmentation.mask) || segmentation.mask.length < 3) {
-    throw new Error('Gemini no devolvió un contorno válido para la prenda.')
-  }
-
   const image = await loadImage(source)
-  const width = image.naturalWidth
-  const height = image.naturalHeight
-
-  const imageCanvas = document.createElement('canvas')
-  imageCanvas.width = width
-  imageCanvas.height = height
-
-  const imageContext = imageCanvas.getContext('2d')
-  if (!imageContext) {
-    throw new Error('El navegador no pudo preparar la máscara de Gemini.')
-  }
-
-  imageContext.drawImage(image, 0, 0, width, height)
-
-  const maskCanvas = document.createElement('canvas')
-  maskCanvas.width = width
-  maskCanvas.height = height
-
-  const maskContext = maskCanvas.getContext('2d')
-  if (!maskContext) {
-    throw new Error('El navegador no pudo preparar el contorno de Gemini.')
-  }
-
-  const points = segmentation.mask.map((point) =>
-    fullImageMaskPoint(point, segmentation.box_2d),
-  )
-
-  maskContext.fillStyle = '#ffffff'
-  maskContext.beginPath()
-  maskContext.moveTo(
-    (points[0].x / GEMINI_COORDINATE_SCALE) * width,
-    (points[0].y / GEMINI_COORDINATE_SCALE) * height,
-  )
-
-  for (let index = 1; index < points.length; index += 1) {
-    maskContext.lineTo(
-      (points[index].x / GEMINI_COORDINATE_SCALE) * width,
-      (points[index].y / GEMINI_COORDINATE_SCALE) * height,
-    )
-  }
-
-  maskContext.closePath()
-  maskContext.fill()
-
-  imageContext.globalCompositeOperation = 'destination-in'
-  imageContext.drawImage(maskCanvas, 0, 0)
-  imageContext.globalCompositeOperation = 'source-over'
+  const imageWidth = image.naturalWidth
+  const imageHeight = image.naturalHeight
 
   const [rawYmin, rawXmin, rawYmax, rawXmax] = segmentation.box_2d.map(clamp1000)
-  const boxWidth = Math.max(1, rawXmax - rawXmin)
-  const boxHeight = Math.max(1, rawYmax - rawYmin)
-  const paddingX = Math.max(10, boxWidth * CROP_PADDING_RATIO)
-  const paddingY = Math.max(10, boxHeight * CROP_PADDING_RATIO)
 
-  const cropX1 = Math.max(0, rawXmin - paddingX)
-  const cropY1 = Math.max(0, rawYmin - paddingY)
-  const cropX2 = Math.min(GEMINI_COORDINATE_SCALE, rawXmax + paddingX)
-  const cropY2 = Math.min(GEMINI_COORDINATE_SCALE, rawYmax + paddingY)
+  if (rawXmax <= rawXmin || rawYmax <= rawYmin) {
+    throw new Error('Gemini devolvió una región inválida para la prenda.')
+  }
 
-  const sourceX = Math.floor((cropX1 / GEMINI_COORDINATE_SCALE) * width)
-  const sourceY = Math.floor((cropY1 / GEMINI_COORDINATE_SCALE) * height)
-  const sourceRight = Math.ceil((cropX2 / GEMINI_COORDINATE_SCALE) * width)
-  const sourceBottom = Math.ceil((cropY2 / GEMINI_COORDINATE_SCALE) * height)
+  // The bounding box is the primary semantic hint. The polygon is only used
+  // to ensure that every area Gemini considered part of the garment remains
+  // inside the local algorithm's working region. It is never used as alpha.
+  let x1 = rawXmin
+  let y1 = rawYmin
+  let x2 = rawXmax
+  let y2 = rawYmax
+
+  if (Array.isArray(segmentation.mask) && segmentation.mask.length >= 3) {
+    for (const point of segmentation.mask) {
+      const fullPoint = fullImageMaskPoint(point, segmentation.box_2d)
+      x1 = Math.min(x1, fullPoint.x)
+      y1 = Math.min(y1, fullPoint.y)
+      x2 = Math.max(x2, fullPoint.x)
+      y2 = Math.max(y2, fullPoint.y)
+    }
+  }
+
+  const garmentWidth = Math.max(1, x2 - x1)
+  const garmentHeight = Math.max(1, y2 - y1)
+
+  // A generous border is intentional. The local algorithm models the
+  // background from the crop borders/corners, so an overly tight crop would
+  // make the garment itself look like background.
+  const paddingX = Math.max(MINIMUM_PADDING, garmentWidth * CROP_PADDING_RATIO)
+  const paddingY = Math.max(MINIMUM_PADDING, garmentHeight * CROP_PADDING_RATIO)
+
+  const cropX1 = Math.max(0, x1 - paddingX)
+  const cropY1 = Math.max(0, y1 - paddingY)
+  const cropX2 = Math.min(GEMINI_COORDINATE_SCALE, x2 + paddingX)
+  const cropY2 = Math.min(GEMINI_COORDINATE_SCALE, y2 + paddingY)
+
+  const sourceX = Math.max(0, Math.floor((cropX1 / GEMINI_COORDINATE_SCALE) * imageWidth))
+  const sourceY = Math.max(0, Math.floor((cropY1 / GEMINI_COORDINATE_SCALE) * imageHeight))
+  const sourceRight = Math.min(
+    imageWidth,
+    Math.ceil((cropX2 / GEMINI_COORDINATE_SCALE) * imageWidth),
+  )
+  const sourceBottom = Math.min(
+    imageHeight,
+    Math.ceil((cropY2 / GEMINI_COORDINATE_SCALE) * imageHeight),
+  )
+
   const sourceWidth = Math.max(1, sourceRight - sourceX)
   const sourceHeight = Math.max(1, sourceBottom - sourceY)
 
-  const outputCanvas = document.createElement('canvas')
-  outputCanvas.width = sourceWidth
-  outputCanvas.height = sourceHeight
+  const canvas = document.createElement('canvas')
+  canvas.width = sourceWidth
+  canvas.height = sourceHeight
 
-  const outputContext = outputCanvas.getContext('2d')
-  if (!outputContext) {
-    throw new Error('El navegador no pudo preparar el recorte final de Gemini.')
+  const context = canvas.getContext('2d')
+  if (!context) {
+    throw new Error('El navegador no pudo preparar la región guiada por Gemini.')
   }
 
-  outputContext.drawImage(
-    imageCanvas,
+  context.drawImage(
+    image,
     sourceX,
     sourceY,
     sourceWidth,
@@ -150,5 +146,5 @@ export async function applyGeminiGarmentMask(
     sourceHeight,
   )
 
-  return canvasToPng(outputCanvas)
+  return canvasToBlob(canvas)
 }
