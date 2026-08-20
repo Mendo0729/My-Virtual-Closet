@@ -11,10 +11,8 @@ export interface GeminiSegmentationResult {
 }
 
 const REQUEST_TIMEOUT_MS = 35_000
-const MAX_ANALYSIS_DIMENSION = 640
-const ANALYSIS_JPEG_QUALITY = 0.78
-
-const segmentationCache = new WeakMap<Blob, Promise<GeminiSegmentationResult>>()
+const MAX_ANALYSIS_DIMENSION = 768
+const ANALYSIS_JPEG_QUALITY = 0.84
 
 function loadImage(source: Blob) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -90,7 +88,7 @@ function blobToDataUrl(blob: Blob) {
   })
 }
 
-async function requestGeminiSegmentation(source: Blob): Promise<GeminiSegmentationResult> {
+export async function segmentGarmentWithGemini(source: Blob): Promise<GeminiSegmentationResult> {
   const controller = new AbortController()
   const timeout = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
@@ -129,24 +127,4 @@ async function requestGeminiSegmentation(source: Blob): Promise<GeminiSegmentati
   } finally {
     window.clearTimeout(timeout)
   }
-}
-
-/**
- * Reuses the semantic segmentation while the same Blob is selected. This
- * avoids another Gemini request when the user presses "Recortar de nuevo".
- * Failed requests are never cached.
- */
-export function segmentGarmentWithGemini(source: Blob): Promise<GeminiSegmentationResult> {
-  const cached = segmentationCache.get(source)
-  if (cached) {
-    return cached
-  }
-
-  const request = requestGeminiSegmentation(source).catch((error) => {
-    segmentationCache.delete(source)
-    throw error
-  })
-
-  segmentationCache.set(source, request)
-  return request
 }
