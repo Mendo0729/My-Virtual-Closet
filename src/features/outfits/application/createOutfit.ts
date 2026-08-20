@@ -1,5 +1,5 @@
 import { db } from '../../../infrastructure/database/db'
-import type { Outfit, OutfitItem, OutfitSlot } from '../domain/Outfit'
+import type { Outfit, OutfitCategory, OutfitItem, OutfitSlot } from '../domain/Outfit'
 
 export interface CreateOutfitItemInput {
   garmentId: string
@@ -9,6 +9,7 @@ export interface CreateOutfitItemInput {
 
 export interface CreateOutfitInput {
   name?: string
+  category?: OutfitCategory
   items: CreateOutfitItemInput[]
 }
 
@@ -34,6 +35,8 @@ export async function createOutfit(input: CreateOutfitInput) {
   const outfit: Outfit = {
     id: outfitId,
     name: requestedName || defaultName,
+    category: input.category ?? 'casual',
+    favorite: false,
     createdAt: now,
     updatedAt: now,
   }
