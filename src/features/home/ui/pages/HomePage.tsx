@@ -30,11 +30,6 @@ export default function HomePage() {
         </div>
       </header>
 
-      <section className="mt-4">
-        <h2 className="text-lg font-extrabold tracking-tight text-zinc-950 dark:text-white">Tu closet, tu estilo.</h2>
-        <p className="mt-0.5 text-xs text-zinc-500 dark:text-slate-400">Combina lo que ya tienes y crea algo diferente.</p>
-      </section>
-
       <section className="relative mt-4 overflow-hidden rounded-[26px] bg-gradient-to-br from-violet-600 via-fuchsia-500 to-pink-400 p-5 text-white shadow-[0_18px_40px_rgba(168,85,247,0.24)]">
         <div className="absolute -right-9 -top-12 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
         <div className="absolute -bottom-14 left-20 h-32 w-32 rounded-full bg-pink-200/20 blur-2xl" />
