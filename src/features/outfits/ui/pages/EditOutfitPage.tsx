@@ -5,6 +5,7 @@ import { db } from '../../../../infrastructure/database/db'
 import ClothingIcon from '../../../../shared/components/ClothingIcon'
 import UiIcon from '../../../../shared/components/UiIcon'
 import type { Garment } from '../../../wardrobe/domain/Garment'
+import { deleteOutfit } from '../../application/deleteOutfit'
 import { updateOutfit } from '../../application/updateOutfit'
 import type { OutfitCategory, OutfitSlot } from '../../domain/Outfit'
 import GarmentImage from '../components/GarmentImage'
@@ -52,6 +53,8 @@ export default function EditOutfitPage() {
   const [selectedIds, setSelectedIds] = useState<Record<OutfitSlot, string>>(emptySelection)
   const [initializedId, setInitializedId] = useState<string>()
   const [isSaving, setIsSaving] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false)
   const [error, setError] = useState<string>()
 
   useEffect(() => {
@@ -110,6 +113,22 @@ export default function EditOutfitPage() {
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'No se pudo actualizar el look.')
       setIsSaving(false)
+    }
+  }
+
+  async function handleDelete() {
+    if (!data?.outfit || isDeleting) return
+
+    setError(undefined)
+    setIsDeleting(true)
+
+    try {
+      await deleteOutfit(data.outfit.id)
+      navigate('/outfits', { replace: true })
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'No se pudo eliminar el look.')
+      setIsDeleting(false)
+      setIsDeleteOpen(false)
     }
   }
 
@@ -226,12 +245,81 @@ export default function EditOutfitPage() {
 
         <button
           type="submit"
-          disabled={isSaving}
+          disabled={isSaving || isDeleting}
           className="mt-4 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-pink-500 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-pink-500/15 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSaving ? 'Guardando…' : 'Guardar cambios'}
         </button>
+
+        <section className="mt-4 rounded-[24px] border border-red-200 bg-red-50/70 p-4 dark:border-red-500/20 dark:bg-red-500/[0.06]">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-red-100 text-red-600 dark:bg-red-500/10 dark:text-red-300">
+              <UiIcon name="trash" className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-extrabold text-red-800 dark:text-red-200">Eliminar look</h2>
+              <p className="mt-0.5 text-[10px] leading-4 text-red-600/80 dark:text-red-300/70">
+                Se eliminará esta combinación guardada. Tus prendas permanecerán en el closet.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            disabled={isSaving || isDeleting}
+            onClick={() => {
+              setError(undefined)
+              setIsDeleteOpen(true)
+            }}
+            className="mt-4 w-full rounded-2xl border border-red-200 bg-white py-3 text-xs font-extrabold text-red-600 transition active:scale-[0.99] disabled:opacity-50 dark:border-red-500/20 dark:bg-[#0d1829] dark:text-red-300"
+          >
+            Eliminar look
+          </button>
+        </section>
       </form>
+
+      {isDeleteOpen && (
+        <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 p-4 backdrop-blur-[2px] sm:items-center">
+          <div
+            className="w-full max-w-sm rounded-[28px] bg-white p-5 shadow-2xl dark:bg-[#0d1829]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-outfit-title"
+          >
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300">
+              <UiIcon name="trash" className="h-6 w-6" />
+            </div>
+
+            <h2 id="delete-outfit-title" className="mt-4 text-lg font-extrabold text-zinc-900 dark:text-white">
+              ¿Eliminar este look?
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-slate-400">
+              Se eliminará <strong className="font-extrabold text-zinc-800 dark:text-slate-200">{data.outfit.name}</strong> y sus referencias de combinación. Las prendas no se eliminarán de tu closet.
+            </p>
+
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setIsDeleteOpen(false)}
+                className="rounded-2xl border border-zinc-200 py-3 text-sm font-bold text-zinc-700 disabled:opacity-50 dark:border-white/10 dark:text-slate-300"
+              >
+                Cancelar
+              </button>
+
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleDelete}
+                className="rounded-2xl bg-red-600 py-3 text-sm font-extrabold text-white disabled:opacity-50"
+              >
+                {isDeleting ? 'Eliminando…' : 'Sí, eliminar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
