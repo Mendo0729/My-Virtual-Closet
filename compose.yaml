@@ -44,7 +44,7 @@ services:
       - --no-ui
 
     environment:
-      OMP_NUM_THREADS: "6"
+      OMP_NUM_THREADS: "2"
 
     volumes:
       - rembg_models:/root/.u2net
@@ -52,8 +52,8 @@ services:
     networks:
       - mvc-dev
 
-    cpus: "6.0"
-    mem_limit: 4g
+    cpus: "2.0"
+    mem_limit: 3g
 
     restart: unless-stopped
 
