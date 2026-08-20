@@ -1,10 +1,13 @@
 import type { GarmentCategory } from '../../wardrobe/domain/Garment'
 
 export type OutfitSlot = GarmentCategory
+export type OutfitCategory = 'casual' | 'trabajo' | 'noche' | 'deporte'
 
 export interface Outfit {
   id: string
   name: string
+  category?: OutfitCategory
+  favorite?: boolean
   createdAt: string
   updatedAt: string
 }
