@@ -1,10 +1,12 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { createGarment } from '../../application/createGarment'
 import type { GarmentCategory } from '../../domain/Garment'
 import {
   BACKGROUND_REMOVAL_MODEL,
-  removeGarmentBackgroundWithAi,
+  analyzeGarmentForCutout,
+  removeGarmentBackgroundFromMap,
+  type GeminiSegmentationResult,
 } from '../../../../infrastructure/backgroundRemoval/rembgClient'
 import { processGarmentImage, removeGarmentBackground } from '../../../../infrastructure/storage/imageProcessor'
 import UiIcon from '../../../../shared/components/UiIcon'
@@ -29,6 +31,7 @@ type BackgroundRemovalMethod = 'ai' | 'local'
 
 export default function AddGarmentPage() {
   const navigate = useNavigate()
+  const imageSelectionVersion = useRef(0)
   const [name, setName] = useState('')
   const [category, setCategory] = useState<GarmentCategory>('top')
   const [color, setColor] = useState('')
@@ -36,6 +39,9 @@ export default function AddGarmentPage() {
   const [image, setImage] = useState<Blob>()
   const [originalImage, setOriginalImage] = useState<Blob>()
   const [cutoutSource, setCutoutSource] = useState<Blob>()
+  const [geminiMap, setGeminiMap] = useState<GeminiSegmentationResult>()
+  const [isAiMapping, setIsAiMapping] = useState(false)
+  const [aiMappingNote, setAiMappingNote] = useState<string>()
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [isBackgroundRemoved, setIsBackgroundRemoved] = useState(false)
   const [backgroundRemovalMethod, setBackgroundRemovalMethod] = useState<BackgroundRemovalMethod>()
@@ -63,22 +69,72 @@ export default function AddGarmentPage() {
       return
     }
 
+    const selectionVersion = imageSelectionVersion.current + 1
+    imageSelectionVersion.current = selectionVersion
+
     setError(undefined)
+    setGeminiMap(undefined)
+    setAiMappingNote(undefined)
+    setIsAiMapping(false)
     setIsProcessing(true)
     setProcessingLabel('Optimizando imagen…')
     setIsBackgroundRemoved(false)
     setBackgroundRemovalMethod(undefined)
     setBackgroundRemovalNote(undefined)
 
+    let processedImage: Blob
+
     try {
-      const processedImage = await processGarmentImage(file)
+      processedImage = await processGarmentImage(file)
+
+      if (selectionVersion !== imageSelectionVersion.current) {
+        return
+      }
+
       setCutoutSource(file)
       setOriginalImage(processedImage)
       setImage(processedImage)
     } catch (imageError) {
-      setError(imageError instanceof Error ? imageError.message : 'No se pudo procesar la imagen.')
+      if (selectionVersion === imageSelectionVersion.current) {
+        setError(imageError instanceof Error ? imageError.message : 'No se pudo procesar la imagen.')
+      }
+      return
     } finally {
-      setIsProcessing(false)
+      if (selectionVersion === imageSelectionVersion.current) {
+        setIsProcessing(false)
+      }
+    }
+
+    if (selectionVersion !== imageSelectionVersion.current) {
+      return
+    }
+
+    setIsAiMapping(true)
+    setAiMappingNote('Analizando la prenda y preparando el mapa de corte…')
+
+    try {
+      // This is the only Gemini request for the selected photo. The returned
+      // coordinates stay in memory and every cut/re-cut reuses them locally.
+      const map = await analyzeGarmentForCutout(processedImage)
+
+      if (selectionVersion !== imageSelectionVersion.current) {
+        return
+      }
+
+      setGeminiMap(map)
+      setAiMappingNote(`Mapa IA listo · ${map.segmentation.label}`)
+    } catch (mappingError) {
+      if (selectionVersion !== imageSelectionVersion.current) {
+        return
+      }
+
+      console.warn('Gemini garment mapping failed. Local cutout remains available.', mappingError)
+      setGeminiMap(undefined)
+      setAiMappingNote('No se pudo crear el mapa IA. El recorte local sigue disponible.')
+    } finally {
+      if (selectionVersion === imageSelectionVersion.current) {
+        setIsAiMapping(false)
+      }
     }
   }
 
@@ -92,26 +148,38 @@ export default function AddGarmentPage() {
     setError(undefined)
     setBackgroundRemovalNote(undefined)
     setIsProcessing(true)
-    setProcessingLabel(`Recortando con IA · ${BACKGROUND_REMOVAL_MODEL}…`)
+    setProcessingLabel(geminiMap ? 'Recortando con el mapa IA ya generado…' : 'Aplicando recorte local…')
 
     try {
-      try {
-        const aiSource = originalImage ?? source
-        const transparentImage = await removeGarmentBackgroundWithAi(aiSource)
-        setImage(transparentImage)
-        setIsBackgroundRemoved(true)
-        setBackgroundRemovalMethod('ai')
-        setBackgroundRemovalNote(`Recorte generado con IA · ${BACKGROUND_REMOVAL_MODEL}`)
-      } catch (aiError) {
-        console.warn('AI background removal failed. Falling back to local processing.', aiError)
-        setProcessingLabel('IA no disponible. Aplicando recorte local…')
-
-        const transparentImage = await removeGarmentBackground(source)
-        setImage(transparentImage)
-        setIsBackgroundRemoved(true)
-        setBackgroundRemovalMethod('local')
-        setBackgroundRemovalNote('La IA no respondió; se aplicó el recorte local como respaldo.')
+      if (geminiMap) {
+        try {
+          const mappedSource = originalImage ?? source
+          const transparentImage = await removeGarmentBackgroundFromMap(
+            mappedSource,
+            geminiMap.segmentation,
+          )
+          setImage(transparentImage)
+          setIsBackgroundRemoved(true)
+          setBackgroundRemovalMethod('ai')
+          setBackgroundRemovalNote(
+            `Recorte generado con mapa IA · ${geminiMap.segmentation.label} · sin nueva llamada a Gemini`,
+          )
+          return
+        } catch (mappedCutoutError) {
+          console.warn('Mapped background removal failed. Falling back to local processing.', mappedCutoutError)
+          setProcessingLabel('El mapa no pudo aplicarse. Usando recorte local…')
+        }
       }
+
+      const transparentImage = await removeGarmentBackground(source)
+      setImage(transparentImage)
+      setIsBackgroundRemoved(true)
+      setBackgroundRemovalMethod('local')
+      setBackgroundRemovalNote(
+        geminiMap
+          ? 'El mapa IA no pudo aplicarse; se usó el recorte local como respaldo.'
+          : 'Se aplicó el recorte local porque no había un mapa IA disponible.',
+      )
     } catch (imageError) {
       setError(imageError instanceof Error ? imageError.message : 'No se pudo quitar el fondo de la imagen.')
     } finally {
@@ -207,7 +275,13 @@ export default function AddGarmentPage() {
             </p>
           )}
 
-          <ImagePicker onSelect={handleImageSelected} disabled={isProcessing || isSaving} />
+          {isAiMapping && !isProcessing && (
+            <p className="mt-4 text-sm font-bold text-violet-600 dark:text-fuchsia-300" role="status">
+              Analizando mapa de la prenda con Gemini…
+            </p>
+          )}
+
+          <ImagePicker onSelect={handleImageSelected} disabled={isProcessing || isAiMapping || isSaving} />
 
           {image && originalImage && (
             <div className="mt-3">
@@ -215,11 +289,15 @@ export default function AddGarmentPage() {
                 <button
                   type="button"
                   onClick={handleRemoveBackground}
-                  disabled={isProcessing || isSaving}
+                  disabled={isProcessing || isAiMapping || isSaving}
                   className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-4 py-3 text-xs font-extrabold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-950"
                 >
                   <UiIcon name="sparkles" className="h-4 w-4" />
-                  {isBackgroundRemoved ? 'Recortar de nuevo con IA' : 'Quitar fondo con IA'}
+                  {isAiMapping
+                    ? 'Preparando mapa IA…'
+                    : isBackgroundRemoved
+                      ? 'Recortar de nuevo'
+                      : 'Quitar fondo'}
                 </button>
 
                 {isBackgroundRemoved && (
@@ -233,6 +311,21 @@ export default function AddGarmentPage() {
                   </button>
                 )}
               </div>
+
+              {aiMappingNote && !backgroundRemovalNote && (
+                <p
+                  className={`mt-2 rounded-xl px-3 py-2 text-[11px] font-semibold leading-4 ${
+                    isAiMapping
+                      ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300'
+                      : geminiMap
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                        : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                  }`}
+                  role="status"
+                >
+                  {aiMappingNote}
+                </p>
+              )}
 
               {backgroundRemovalNote && (
                 <p
@@ -249,8 +342,12 @@ export default function AddGarmentPage() {
 
               <p className="mt-2 px-2 text-[11px] leading-4 text-zinc-500 dark:text-slate-400">
                 {isBackgroundRemoved
-                  ? 'El recorte se guardará con transparencia. Puedes volver a la foto original antes de guardar.'
-                  : `IA en prueba: ${BACKGROUND_REMOVAL_MODEL}. Si el servicio no responde, se usará automáticamente el recorte local.`}
+                  ? 'El recorte se guardará con transparencia. Recortar de nuevo reutiliza el mismo mapa y no vuelve a llamar a Gemini.'
+                  : isAiMapping
+                    ? 'Gemini se consulta una sola vez al cargar esta foto para crear el mapa de coordenadas.'
+                    : geminiMap
+                      ? `Mapa IA listo con ${BACKGROUND_REMOVAL_MODEL}. El botón de recorte trabaja localmente y no hace otra llamada.`
+                      : 'Si Gemini no puede crear el mapa, el recorte local queda disponible como respaldo.'}
               </p>
             </div>
           )}
