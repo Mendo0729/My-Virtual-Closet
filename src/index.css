@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
 html,
 body,
 #root {
@@ -8,10 +15,20 @@ body,
   margin: 0;
 }
 
+html {
+  background: #f2eef8;
+}
+
+html.dark {
+  background: #050a14;
+}
+
 body {
   min-width: 320px;
-  background: #f6f4fa;
-  color: #211f26;
+  background:
+    radial-gradient(circle at top, rgba(139, 92, 246, 0.08), transparent 32rem),
+    #f2eef8;
+  color: #15131b;
   font-family:
     Inter,
     ui-sans-serif,
@@ -20,6 +37,14 @@ body {
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.dark body {
+  background:
+    radial-gradient(circle at top, rgba(124, 58, 237, 0.16), transparent 28rem),
+    #050a14;
+  color: #f8fafc;
 }
 
 button,
@@ -27,4 +52,17 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(168, 85, 247, 0.25);
 }

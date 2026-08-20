@@ -42,7 +42,7 @@ export default function ImagePicker({ onSelect, disabled = false }: ImagePickerP
         type="button"
         disabled={disabled}
         onClick={() => cameraInputRef.current?.click()}
-        className="mt-7 w-full rounded-2xl bg-violet-600 px-4 py-3.5 text-sm font-semibold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-5 w-full rounded-2xl bg-gradient-to-r from-violet-600 to-pink-500 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-pink-500/15 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
       >
         Usar cámara
       </button>
@@ -51,7 +51,7 @@ export default function ImagePicker({ onSelect, disabled = false }: ImagePickerP
         type="button"
         disabled={disabled}
         onClick={() => galleryInputRef.current?.click()}
-        className="mt-3 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-sm font-semibold text-zinc-700 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
+        className="mt-3 w-full rounded-2xl border border-zinc-200 bg-white px-4 py-3.5 text-sm font-bold text-zinc-700 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-[#111c2e] dark:text-slate-100"
       >
         Elegir de la galería
       </button>

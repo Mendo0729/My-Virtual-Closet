@@ -1,159 +1,173 @@
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router'
 import { db } from '../../../../infrastructure/database/db'
-import type { GarmentCategory } from '../../../wardrobe/domain/Garment'
-
-const categories: Array<{
-  name: string
-  category: GarmentCategory
-  icon: string
-}> = [
-  {
-    name: 'Tops',
-    category: 'top',
-    icon: '👚',
-  },
-  {
-    name: 'Bottoms',
-    category: 'bottom',
-    icon: '👖',
-  },
-  {
-    name: 'Zapatos',
-    category: 'shoes',
-    icon: '👟',
-  },
-]
+import BrandMark from '../../../../shared/components/BrandMark'
+import ClothingIcon, { type ClothingIconKind } from '../../../../shared/components/ClothingIcon'
+import UiIcon from '../../../../shared/components/UiIcon'
 
 export default function HomePage() {
   const garments = useLiveQuery(() => db.garments.toArray(), [], [])
   const latestOutfits = useLiveQuery(
-    () => db.outfits.orderBy('createdAt').reverse().limit(2).toArray(),
+    () => db.outfits.orderBy('createdAt').reverse().limit(3).toArray(),
     [],
     [],
   )
 
-  return (
-    <div>
-      <header className="flex items-center justify-between px-5 pb-4 pt-7">
-        <div>
-          <p className="text-sm text-zinc-500">Mi armario digital</p>
+  const totalGarments = garments.length
+  const shoesCount = garments.filter((garment) => garment.category === 'shoes').length
+  const accessoriesCount = garments.filter((garment) => garment.category === 'accessory').length
 
-          <h1 className="mt-0.5 text-xl font-semibold tracking-tight text-zinc-900">
-            My Virtual Closet
-          </h1>
+  return (
+    <div className="px-4 pt-5">
+      <header className="flex items-center justify-between">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-violet-500 dark:text-fuchsia-400">My Virtual Closet</p>
+          <h1 className="mt-0.5 text-xl font-extrabold tracking-tight text-zinc-950 dark:text-white">Inicio</h1>
         </div>
 
-        <div className="flex h-11 w-11 items-center justify-center rounded-full bg-violet-100 text-sm font-semibold text-violet-700">
-          MVC
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-black/[0.04] dark:bg-[#0d1829] dark:ring-white/[0.06]">
+          <BrandMark compact />
         </div>
       </header>
 
-      <section className="px-4">
-        <div className="overflow-hidden rounded-[28px] bg-gradient-to-br from-violet-100 via-purple-50 to-pink-50 p-5">
-          <div className="mb-7 flex h-12 w-12 items-center justify-center rounded-2xl bg-white/80 shadow-sm">
-            <span className="text-2xl">✨</span>
+      <section className="relative mt-4 overflow-hidden rounded-[26px] bg-gradient-to-br from-violet-600 via-fuchsia-500 to-pink-400 p-5 text-white shadow-[0_18px_40px_rgba(168,85,247,0.24)]">
+        <div className="absolute -right-9 -top-12 h-36 w-36 rounded-full bg-white/15 blur-2xl" />
+        <div className="absolute -bottom-14 left-20 h-32 w-32 rounded-full bg-pink-200/20 blur-2xl" />
+
+        <div className="relative z-10 max-w-[58%]">
+          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/15 backdrop-blur">
+            <UiIcon name="sparkles" className="h-4 w-4" />
           </div>
-
-          <p className="text-sm font-medium text-violet-700">Tu estilo, tus prendas</p>
-
-          <h2 className="mt-1 max-w-[280px] text-2xl font-semibold leading-tight tracking-tight text-zinc-900">
-            ¿Qué te vas a poner hoy?
-          </h2>
-
-          <p className="mt-2 max-w-[300px] text-sm leading-6 text-zinc-600">
-            Explora tu closet y crea una combinación con las prendas que ya tienes.
+          <p className="mt-3 text-base font-extrabold">Crea tu próximo look</p>
+          <p className="mt-2 text-xs leading-5 text-white/85">
+            Mezcla tus prendas y arma combinaciones únicas con lo que ya tienes.
           </p>
 
           <Link
             to="/outfit"
-            className="mt-5 flex w-full items-center justify-center rounded-2xl bg-violet-600 px-5 py-3.5 text-sm font-semibold text-white shadow-lg shadow-violet-200 transition active:scale-[0.98]"
+            className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white/95 px-4 py-2.5 text-xs font-extrabold text-violet-700 shadow-lg shadow-violet-900/10 transition active:scale-[0.98]"
           >
-            Crear un outfit
+            Crear outfit
+            <span className="text-base leading-none" aria-hidden="true">＋</span>
           </Link>
+        </div>
+
+        <div className="absolute bottom-4 right-4 grid w-[128px] grid-cols-2 gap-2" aria-hidden="true">
+          <HeroIcon kind="top" />
+          <HeroIcon kind="accessory" />
+          <HeroIcon kind="bottom" />
+          <HeroIcon kind="shoes" />
         </div>
       </section>
 
-      <section className="mt-7">
-        <div className="flex items-center justify-between px-5">
-          <h2 className="text-lg font-semibold text-zinc-900">Tu closet</h2>
-
-          <Link to="/closet" className="text-sm font-medium text-violet-600">
-            Ver todo
-          </Link>
+      <section className="mt-6">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-extrabold text-zinc-950 dark:text-white">Resumen de tu closet</h2>
+          <Link to="/closet" className="text-xs font-bold text-fuchsia-500">Ver todo</Link>
         </div>
 
-        <div className="mt-3 flex gap-3 overflow-x-auto px-4 pb-2">
-          {categories.map((category) => {
-            const count = garments.filter((garment) => garment.category === category.category).length
-
-            return (
-              <Link
-                key={category.name}
-                to="/closet"
-                className="min-w-[120px] flex-1 rounded-3xl border border-zinc-100 bg-white p-3 shadow-sm"
-              >
-                <div className="flex aspect-square items-center justify-center rounded-2xl bg-[#f5f1fa] text-5xl">
-                  {category.icon}
-                </div>
-
-                <h3 className="mt-3 text-sm font-semibold text-zinc-900">{category.name}</h3>
-
-                <p className="mt-0.5 text-xs text-zinc-500">
-                  {count} {count === 1 ? 'prenda' : 'prendas'}
-                </p>
-              </Link>
-            )
-          })}
+        <div className="mt-3 grid grid-cols-3 gap-2.5">
+          <SummaryCard label="Prendas" value={totalGarments} icon="top" tone="violet" />
+          <SummaryCard label="Zapatos" value={shoesCount} icon="shoes" tone="pink" />
+          <SummaryCard label="Accesorios" value={accessoriesCount} icon="accessory" tone="amber" />
         </div>
       </section>
 
-      <section className="mt-7 px-4">
-        <div className="flex items-center justify-between px-1">
-          <h2 className="text-lg font-semibold text-zinc-900">Últimos looks</h2>
-
-          <Link to="/outfits" className="text-sm font-medium text-violet-600">
-            Ver todos
-          </Link>
+      <section className="mt-6 pb-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-extrabold text-zinc-950 dark:text-white">Looks guardados</h2>
+          <Link to="/outfits" className="text-xs font-bold text-fuchsia-500">Ver todos</Link>
         </div>
 
         {latestOutfits.length === 0 ? (
-          <div className="mt-3 rounded-3xl border border-dashed border-zinc-300 bg-white px-6 py-9 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-violet-50 text-xl">
-              ♡
+          <div className="mt-3 rounded-[22px] border border-dashed border-zinc-200 bg-white px-5 py-7 text-center shadow-sm dark:border-white/10 dark:bg-[#0d1829]">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-fuchsia-300">
+              <UiIcon name="heart" className="h-5 w-5" />
             </div>
-
-            <p className="mt-3 text-sm font-semibold text-zinc-800">
-              Aún no tienes looks guardados
-            </p>
-
-            <p className="mx-auto mt-1 max-w-[250px] text-xs leading-5 text-zinc-500">
-              Crea tu primera combinación y aparecerá aquí.
-            </p>
+            <p className="mt-3 text-sm font-bold text-zinc-800 dark:text-slate-100">Aún no tienes looks guardados</p>
+            <p className="mt-1 text-xs text-zinc-400 dark:text-slate-500">Tu primera combinación aparecerá aquí.</p>
           </div>
         ) : (
-          <div className="mt-3 space-y-3">
-            {latestOutfits.map((outfit) => (
+          <div className="mt-3 flex gap-3 overflow-x-auto pb-2">
+            {latestOutfits.map((outfit, index) => (
               <Link
                 key={outfit.id}
                 to="/outfits"
-                className="flex items-center justify-between rounded-3xl bg-white px-5 py-4 shadow-sm"
+                className="min-w-[138px] overflow-hidden rounded-[20px] border border-black/[0.04] bg-white shadow-sm transition active:scale-[0.99] dark:border-white/[0.07] dark:bg-[#0d1829]"
               >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-zinc-900">{outfit.name}</p>
-                  <p className="mt-1 text-xs text-zinc-400">
-                    {new Intl.DateTimeFormat('es-PA', {
-                      day: 'numeric',
-                      month: 'short',
-                    }).format(new Date(outfit.createdAt))}
+                <LookPreview variant={index % 3} />
+                <div className="p-3">
+                  <p className="truncate text-xs font-extrabold text-zinc-900 dark:text-white">{outfit.name}</p>
+                  <p className="mt-1 text-[10px] text-zinc-400 dark:text-slate-500">
+                    {new Intl.DateTimeFormat('es-PA', { day: '2-digit', month: 'short' }).format(new Date(outfit.createdAt))}
                   </p>
                 </div>
-                <span className="text-lg text-violet-500">›</span>
               </Link>
             ))}
           </div>
         )}
       </section>
+    </div>
+  )
+}
+
+function HeroIcon({ kind }: { kind: ClothingIconKind }) {
+  return (
+    <span className="flex h-14 items-center justify-center rounded-2xl bg-white/15 text-white shadow-inner shadow-white/10 backdrop-blur">
+      <ClothingIcon kind={kind} className="h-9 w-9 drop-shadow-sm" />
+    </span>
+  )
+}
+
+function SummaryCard({
+  label,
+  value,
+  icon,
+  tone,
+}: {
+  label: string
+  value: number
+  icon: ClothingIconKind
+  tone: 'violet' | 'pink' | 'amber'
+}) {
+  const toneClass = {
+    violet: 'bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300',
+    pink: 'bg-pink-50 text-pink-500 dark:bg-pink-500/10 dark:text-pink-300',
+    amber: 'bg-amber-50 text-amber-600 dark:bg-amber-400/10 dark:text-amber-300',
+  }[tone]
+
+  return (
+    <div className={`rounded-[18px] p-3 ${toneClass}`}>
+      <div className="flex items-center gap-1.5">
+        <ClothingIcon kind={icon} className="h-5 w-5" />
+        <span className="text-[10px] font-bold">{label}</span>
+      </div>
+      <p className="mt-2 text-xl font-black tabular-nums">{value}</p>
+    </div>
+  )
+}
+
+function LookPreview({ variant }: { variant: number }) {
+  const palette = [
+    'from-violet-100 via-fuchsia-50 to-pink-100 dark:from-violet-500/15 dark:via-fuchsia-500/10 dark:to-pink-500/10',
+    'from-sky-100 via-violet-50 to-fuchsia-100 dark:from-sky-500/10 dark:via-violet-500/10 dark:to-fuchsia-500/10',
+    'from-amber-100 via-pink-50 to-violet-100 dark:from-amber-400/10 dark:via-pink-500/10 dark:to-violet-500/10',
+  ][variant]
+
+  return (
+    <div className={`grid h-24 grid-cols-2 gap-1.5 bg-gradient-to-br p-2.5 ${palette}`} aria-hidden="true">
+      <span className="flex items-center justify-center rounded-xl bg-white/60 text-violet-600 dark:bg-white/[0.04] dark:text-violet-300">
+        <ClothingIcon kind="top" className="h-8 w-8" />
+      </span>
+      <span className="flex items-center justify-center rounded-xl bg-white/60 text-fuchsia-500 dark:bg-white/[0.04] dark:text-fuchsia-300">
+        <ClothingIcon kind="accessory" className="h-8 w-8" />
+      </span>
+      <span className="flex items-center justify-center rounded-xl bg-white/60 text-indigo-500 dark:bg-white/[0.04] dark:text-indigo-300">
+        <ClothingIcon kind="bottom" className="h-8 w-8" />
+      </span>
+      <span className="flex items-center justify-center rounded-xl bg-white/60 text-pink-500 dark:bg-white/[0.04] dark:text-pink-300">
+        <ClothingIcon kind="shoes" className="h-8 w-8" />
+      </span>
     </div>
   )
 }
