@@ -2,6 +2,10 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router'
 import { createGarment } from '../../application/createGarment'
 import type { GarmentCategory } from '../../domain/Garment'
+import {
+  BACKGROUND_REMOVAL_MODEL,
+  removeGarmentBackgroundWithAi,
+} from '../../../../infrastructure/backgroundRemoval/rembgClient'
 import { processGarmentImage, removeGarmentBackground } from '../../../../infrastructure/storage/imageProcessor'
 import UiIcon from '../../../../shared/components/UiIcon'
 import ImagePicker from '../components/ImagePicker'
@@ -21,6 +25,8 @@ const transparentPreviewStyle = {
   backgroundSize: '16px 16px',
 }
 
+type BackgroundRemovalMethod = 'ai' | 'local'
+
 export default function AddGarmentPage() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
@@ -32,6 +38,8 @@ export default function AddGarmentPage() {
   const [cutoutSource, setCutoutSource] = useState<Blob>()
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [isBackgroundRemoved, setIsBackgroundRemoved] = useState(false)
+  const [backgroundRemovalMethod, setBackgroundRemovalMethod] = useState<BackgroundRemovalMethod>()
+  const [backgroundRemovalNote, setBackgroundRemovalNote] = useState<string>()
   const [isProcessing, setIsProcessing] = useState(false)
   const [processingLabel, setProcessingLabel] = useState('Optimizando imagen…')
   const [isSaving, setIsSaving] = useState(false)
@@ -59,6 +67,8 @@ export default function AddGarmentPage() {
     setIsProcessing(true)
     setProcessingLabel('Optimizando imagen…')
     setIsBackgroundRemoved(false)
+    setBackgroundRemovalMethod(undefined)
+    setBackgroundRemovalNote(undefined)
 
     try {
       const processedImage = await processGarmentImage(file)
@@ -80,13 +90,28 @@ export default function AddGarmentPage() {
     }
 
     setError(undefined)
+    setBackgroundRemovalNote(undefined)
     setIsProcessing(true)
-    setProcessingLabel('Analizando prenda y fondo…')
+    setProcessingLabel(`Recortando con IA · ${BACKGROUND_REMOVAL_MODEL}…`)
 
     try {
-      const transparentImage = await removeGarmentBackground(source)
-      setImage(transparentImage)
-      setIsBackgroundRemoved(true)
+      try {
+        const aiSource = originalImage ?? source
+        const transparentImage = await removeGarmentBackgroundWithAi(aiSource)
+        setImage(transparentImage)
+        setIsBackgroundRemoved(true)
+        setBackgroundRemovalMethod('ai')
+        setBackgroundRemovalNote(`Recorte generado con IA · ${BACKGROUND_REMOVAL_MODEL}`)
+      } catch (aiError) {
+        console.warn('AI background removal failed. Falling back to local processing.', aiError)
+        setProcessingLabel('IA no disponible. Aplicando recorte local…')
+
+        const transparentImage = await removeGarmentBackground(source)
+        setImage(transparentImage)
+        setIsBackgroundRemoved(true)
+        setBackgroundRemovalMethod('local')
+        setBackgroundRemovalNote('La IA no respondió; se aplicó el recorte local como respaldo.')
+      }
     } catch (imageError) {
       setError(imageError instanceof Error ? imageError.message : 'No se pudo quitar el fondo de la imagen.')
     } finally {
@@ -102,6 +127,8 @@ export default function AddGarmentPage() {
     setError(undefined)
     setImage(originalImage)
     setIsBackgroundRemoved(false)
+    setBackgroundRemovalMethod(undefined)
+    setBackgroundRemovalNote(undefined)
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -192,7 +219,7 @@ export default function AddGarmentPage() {
                   className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-4 py-3 text-xs font-extrabold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-950"
                 >
                   <UiIcon name="sparkles" className="h-4 w-4" />
-                  {isBackgroundRemoved ? 'Recortar de nuevo' : 'Quitar fondo'}
+                  {isBackgroundRemoved ? 'Recortar de nuevo con IA' : 'Quitar fondo con IA'}
                 </button>
 
                 {isBackgroundRemoved && (
@@ -206,10 +233,24 @@ export default function AddGarmentPage() {
                   </button>
                 )}
               </div>
+
+              {backgroundRemovalNote && (
+                <p
+                  className={`mt-2 rounded-xl px-3 py-2 text-[11px] font-semibold leading-4 ${
+                    backgroundRemovalMethod === 'ai'
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
+                      : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
+                  }`}
+                  role="status"
+                >
+                  {backgroundRemovalNote}
+                </p>
+              )}
+
               <p className="mt-2 px-2 text-[11px] leading-4 text-zinc-500 dark:text-slate-400">
                 {isBackgroundRemoved
                   ? 'El recorte se guardará con transparencia. Puedes volver a la foto original antes de guardar.'
-                  : 'Beta: funciona mejor cuando la prenda está completa sobre un fondo liso y con buen contraste.'}
+                  : `IA en prueba: ${BACKGROUND_REMOVAL_MODEL}. Si el servicio no responde, se usará automáticamente el recorte local.`}
               </p>
             </div>
           )}
