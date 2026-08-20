@@ -181,7 +181,9 @@ function extractOutputText(payload) {
 }
 
 function shouldRetry(status) {
-  return status === 429 || status >= 500
+  // Never retry 429 quota/rate-limit responses immediately. They represent a
+  // real quota window, so a second request would only waste another attempt.
+  return status >= 500
 }
 
 async function callGemini(image) {
