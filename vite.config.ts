@@ -7,4 +7,13 @@ export default defineConfig({
     react(),
     tailwindcss(),
   ],
+  server: {
+    proxy: {
+      '/rembg': {
+        target: 'http://background-removal:7000',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/rembg/, ''),
+      },
+    },
+  },
 })
