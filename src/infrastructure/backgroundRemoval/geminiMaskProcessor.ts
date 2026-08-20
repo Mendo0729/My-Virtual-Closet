@@ -4,8 +4,14 @@ const GEMINI_COORDINATE_SCALE = 1000
 const CROP_PADDING_RATIO = 0.14
 const MINIMUM_PADDING = 36
 const COMPONENT_ALPHA_THRESHOLD = 96
-const MAX_UNGUIDED_COMPONENT_RATIO = 0.045
+const MAX_UNGUIDED_COMPONENT_RATIO = 0.12
 const EDGE_CLEANUP_PASSES = 2
+const GUIDE_ENVELOPE_RATIO = 0.04
+const MIN_GUIDE_ENVELOPE_RADIUS = 10
+const MAX_GUIDE_ENVELOPE_RADIUS = 34
+const VISIBLE_ALPHA_THRESHOLD = 18
+const OUTPUT_PADDING_RATIO = 0.035
+const MIN_OUTPUT_PADDING = 10
 
 export interface GeminiLocalGuide {
   polygon: Array<{ x: number; y: number }>
@@ -72,10 +78,8 @@ function fullImageMaskPoint(
 }
 
 /**
- * Gemini does not cut pixels here. It only locates the garment and produces a
- * semantic polygon. The crop keeps enough real background for the classical
- * algorithm to model it, while the normalized polygon is carried forward as
- * a soft guide for post-processing.
+ * Gemini only locates the garment. The crop keeps genuine background around
+ * the object so the classical processor can calculate the real edge.
  */
 export async function prepareGeminiGuidedSource(
   source: Blob,
@@ -160,18 +164,18 @@ export async function prepareGeminiGuidedSource(
     y: clamp01((point.y - cropY1) / cropHeightNormalized),
   }))
 
-  const guidedSource = await canvasToPng(
-    canvas,
-    'No se pudo preparar la imagen guiada por Gemini.',
-  )
-
   return {
-    source: guidedSource,
+    source: await canvasToPng(canvas, 'No se pudo preparar la imagen guiada por Gemini.'),
     guide: { polygon },
   }
 }
 
-function createGuideMask(width: number, height: number, guide: GeminiLocalGuide) {
+function createGuideMask(
+  width: number,
+  height: number,
+  guide: GeminiLocalGuide,
+  envelopeRadius = 0,
+) {
   const maskCanvas = document.createElement('canvas')
   maskCanvas.width = width
   maskCanvas.height = height
@@ -182,6 +186,9 @@ function createGuideMask(width: number, height: number, guide: GeminiLocalGuide)
   }
 
   context.fillStyle = '#fff'
+  context.strokeStyle = '#fff'
+  context.lineJoin = 'round'
+  context.lineCap = 'round'
   context.beginPath()
   context.moveTo(guide.polygon[0].x * width, guide.polygon[0].y * height)
 
@@ -192,6 +199,11 @@ function createGuideMask(width: number, height: number, guide: GeminiLocalGuide)
   context.closePath()
   context.fill()
 
+  if (envelopeRadius > 0) {
+    context.lineWidth = envelopeRadius * 2
+    context.stroke()
+  }
+
   const pixels = context.getImageData(0, 0, width, height).data
   const mask = new Uint8Array(width * height)
 
@@ -200,6 +212,17 @@ function createGuideMask(width: number, height: number, guide: GeminiLocalGuide)
   }
 
   return mask
+}
+
+function trimOutsideGuideEnvelope(
+  data: Uint8ClampedArray,
+  envelopeMask: Uint8Array,
+) {
+  for (let index = 0; index < envelopeMask.length; index += 1) {
+    if (!envelopeMask[index]) {
+      data[index * 4 + 3] = 0
+    }
+  }
 }
 
 function removeUnguidedForegroundComponents(
@@ -212,7 +235,10 @@ function removeUnguidedForegroundComponents(
   const visited = new Uint8Array(pixelCount)
   const queue = new Int32Array(pixelCount)
   const component = new Int32Array(pixelCount)
-  const maxUnguidedComponent = Math.max(24, Math.round(pixelCount * MAX_UNGUIDED_COMPONENT_RATIO))
+  const maxUnguidedComponent = Math.max(
+    24,
+    Math.round(pixelCount * MAX_UNGUIDED_COMPONENT_RATIO),
+  )
 
   for (let start = 0; start < pixelCount; start += 1) {
     if (visited[start] || data[start * 4 + 3] < COMPONENT_ALPHA_THRESHOLD) {
@@ -234,31 +260,27 @@ function removeUnguidedForegroundComponents(
 
       const x = pixelIndex % width
       const y = Math.floor(pixelIndex / width)
-      const neighbors = [
-        x > 0 ? pixelIndex - 1 : -1,
-        x + 1 < width ? pixelIndex + 1 : -1,
-        y > 0 ? pixelIndex - width : -1,
-        y + 1 < height ? pixelIndex + width : -1,
-      ]
 
-      for (const neighbor of neighbors) {
+      const tryAdd = (neighbor: number) => {
         if (
           neighbor < 0 ||
+          neighbor >= pixelCount ||
           visited[neighbor] ||
           data[neighbor * 4 + 3] < COMPONENT_ALPHA_THRESHOLD
         ) {
-          continue
+          return
         }
 
         visited[neighbor] = 1
         queue[tail++] = neighbor
       }
+
+      if (x > 0) tryAdd(pixelIndex - 1)
+      if (x + 1 < width) tryAdd(pixelIndex + 1)
+      if (y > 0) tryAdd(pixelIndex - width)
+      if (y + 1 < height) tryAdd(pixelIndex + width)
     }
 
-    // Gemini is only a semantic anchor. Large regions are deliberately kept
-    // even when its polygon is imperfect. Small detached regions (hanger,
-    // hooks, isolated shadows and specks) are discarded when Gemini did not
-    // consider them garment pixels.
     if (guideHits > 0 || componentSize > maxUnguidedComponent) {
       continue
     }
@@ -274,10 +296,11 @@ function cleanAlphaEdge(
   width: number,
   height: number,
 ) {
-  for (let pass = 0; pass < EDGE_CLEANUP_PASSES; pass += 1) {
-    const sourceAlpha = new Uint8ClampedArray(width * height)
+  const pixelCount = width * height
+  const sourceAlpha = new Uint8ClampedArray(pixelCount)
 
-    for (let index = 0; index < sourceAlpha.length; index += 1) {
+  for (let pass = 0; pass < EDGE_CLEANUP_PASSES; pass += 1) {
+    for (let index = 0; index < pixelCount; index += 1) {
       sourceAlpha[index] = data[index * 4 + 3]
     }
 
@@ -309,9 +332,94 @@ function cleanAlphaEdge(
   }
 }
 
+function visibleBounds(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+) {
+  let minX = width
+  let minY = height
+  let maxX = -1
+  let maxY = -1
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      if (data[(y * width + x) * 4 + 3] < VISIBLE_ALPHA_THRESHOLD) {
+        continue
+      }
+
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x)
+      maxY = Math.max(maxY, y)
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return null
+  }
+
+  const objectWidth = maxX - minX + 1
+  const objectHeight = maxY - minY + 1
+  const padding = Math.max(
+    MIN_OUTPUT_PADDING,
+    Math.round(Math.min(objectWidth, objectHeight) * OUTPUT_PADDING_RATIO),
+  )
+
+  return {
+    x: Math.max(0, minX - padding),
+    y: Math.max(0, minY - padding),
+    right: Math.min(width, maxX + padding + 1),
+    bottom: Math.min(height, maxY + padding + 1),
+  }
+}
+
+function cropToVisibleContent(
+  sourceCanvas: HTMLCanvasElement,
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+) {
+  const bounds = visibleBounds(data, width, height)
+  if (!bounds) {
+    return sourceCanvas
+  }
+
+  const cropWidth = Math.max(1, bounds.right - bounds.x)
+  const cropHeight = Math.max(1, bounds.bottom - bounds.y)
+
+  if (cropWidth === width && cropHeight === height) {
+    return sourceCanvas
+  }
+
+  const output = document.createElement('canvas')
+  output.width = cropWidth
+  output.height = cropHeight
+
+  const context = output.getContext('2d')
+  if (!context) {
+    return sourceCanvas
+  }
+
+  context.drawImage(
+    sourceCanvas,
+    bounds.x,
+    bounds.y,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    cropWidth,
+    cropHeight,
+  )
+
+  return output
+}
+
 /**
- * Refines the local algorithm result using Gemini only as semantic context.
- * The exact Gemini polygon is never used as the final alpha edge.
+ * Gemini is semantic context only. The local result remains the source of the
+ * real edge; Gemini provides a generous envelope that rejects obviously
+ * unrelated pixels and disconnected objects.
  */
 export async function refineGeminiGuidedResult(
   localResult: Blob,
@@ -336,10 +444,21 @@ export async function refineGeminiGuidedResult(
   context.drawImage(image, 0, 0, width, height)
   const imageData = context.getImageData(0, 0, width, height)
   const guideMask = createGuideMask(width, height, guide)
+  const envelopeRadius = Math.max(
+    MIN_GUIDE_ENVELOPE_RADIUS,
+    Math.min(
+      MAX_GUIDE_ENVELOPE_RADIUS,
+      Math.round(Math.min(width, height) * GUIDE_ENVELOPE_RATIO),
+    ),
+  )
+  const envelopeMask = createGuideMask(width, height, guide, envelopeRadius)
 
+  trimOutsideGuideEnvelope(imageData.data, envelopeMask)
   removeUnguidedForegroundComponents(imageData.data, guideMask, width, height)
   cleanAlphaEdge(imageData.data, width, height)
 
   context.putImageData(imageData, 0, 0)
-  return canvasToPng(canvas, 'No se pudo refinar el recorte híbrido.')
+  const croppedCanvas = cropToVisibleContent(canvas, imageData.data, width, height)
+
+  return canvasToPng(croppedCanvas, 'No se pudo refinar el recorte híbrido.')
 }
