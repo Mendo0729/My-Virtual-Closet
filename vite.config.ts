@@ -9,10 +9,10 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      '/rembg': {
-        target: 'http://background-removal:7000',
+      '/ai': {
+        target: 'http://ai-proxy:8787',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/rembg/, ''),
+        rewrite: (path) => path.replace(/^\/ai/, ''),
       },
     },
   },
