@@ -2,16 +2,18 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link, useNavigate } from 'react-router'
 import { db } from '../../../../infrastructure/database/db'
+import ClothingIcon, { type ClothingIconKind } from '../../../../shared/components/ClothingIcon'
+import UiIcon from '../../../../shared/components/UiIcon'
 import type { Garment } from '../../../wardrobe/domain/Garment'
 import { createOutfit } from '../../application/createOutfit'
 import type { OutfitSlot } from '../../domain/Outfit'
 import GarmentImage from '../components/GarmentImage'
 
-const slotDefinitions: Array<{ slot: OutfitSlot; label: string; icon: string }> = [
-  { slot: 'top', label: 'Tops', icon: '👚' },
-  { slot: 'bottom', label: 'Bottoms', icon: '👖' },
-  { slot: 'shoes', label: 'Calzado', icon: '👟' },
-  { slot: 'accessory', label: 'Accesorios', icon: '👜' },
+const slotDefinitions: Array<{ slot: OutfitSlot; label: string; icon: ClothingIconKind }> = [
+  { slot: 'top', label: 'Tops', icon: 'top' },
+  { slot: 'bottom', label: 'Bottoms', icon: 'bottom' },
+  { slot: 'shoes', label: 'Calzado', icon: 'shoes' },
+  { slot: 'accessory', label: 'Accesorios', icon: 'accessory' },
 ]
 
 const initialIndexes: Record<OutfitSlot, number> = {
@@ -122,7 +124,7 @@ export default function OutfitBuilderPage() {
           className="flex h-10 w-10 items-center justify-center rounded-2xl text-zinc-700 transition active:scale-95 dark:text-slate-200"
           aria-label="Volver"
         >
-          ←
+          <UiIcon name="arrow-left" className="h-5 w-5" />
         </Link>
 
         <h1 className="text-center text-base font-extrabold tracking-tight text-zinc-950 dark:text-white">
@@ -156,7 +158,7 @@ export default function OutfitBuilderPage() {
                   : 'text-zinc-500 dark:text-slate-500',
               ].join(' ')}
             >
-              <span className="text-lg leading-none">{definition.icon}</span>
+              <ClothingIcon kind={definition.icon} className="h-6 w-6" />
               <span className="max-w-full truncate">{definition.label}</span>
               <span className="text-[8px] font-semibold opacity-60">{count}</span>
             </button>
@@ -179,9 +181,9 @@ export default function OutfitBuilderPage() {
         </div>
 
         <div className="relative mt-3 grid h-[326px] grid-cols-[minmax(0,1fr)_82px] gap-2 sm:h-[350px]">
-          <span className="pointer-events-none absolute left-3 top-16 z-10 text-amber-400">✦</span>
-          <span className="pointer-events-none absolute right-24 top-3 z-10 text-amber-400">✦</span>
-          <span className="pointer-events-none absolute bottom-14 right-24 z-10 text-amber-400">✦</span>
+          <span className="pointer-events-none absolute left-4 top-16 z-10 h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_10px_rgba(252,211,77,0.8)]" />
+          <span className="pointer-events-none absolute right-24 top-4 z-10 h-1 w-1 rounded-full bg-fuchsia-300 shadow-[0_0_8px_rgba(232,121,249,0.8)]" />
+          <span className="pointer-events-none absolute bottom-14 right-24 z-10 h-1.5 w-1.5 rounded-full bg-violet-300 shadow-[0_0_10px_rgba(196,181,253,0.8)]" />
 
           <div className="grid min-w-0 grid-rows-[108px_minmax(0,1fr)] gap-2">
             <LookPiece
@@ -225,20 +227,20 @@ export default function OutfitBuilderPage() {
             type="button"
             disabled={activeTotal <= 1}
             onClick={() => cycleGarment(activeSlot, -1)}
-            className="flex h-10 items-center justify-center rounded-xl border border-black/[0.06] bg-white/90 text-xl text-zinc-700 shadow-sm disabled:opacity-25 dark:border-white/10 dark:bg-[#111c2e]/90 dark:text-white"
+            className="flex h-10 items-center justify-center rounded-xl border border-black/[0.06] bg-white/90 text-zinc-700 shadow-sm disabled:opacity-25 dark:border-white/10 dark:bg-[#111c2e]/90 dark:text-white"
             aria-label="Prenda anterior"
           >
-            ‹
+            <UiIcon name="chevron-left" className="h-5 w-5" />
           </button>
 
           <button
             type="button"
             disabled={activeTotal <= 1}
             onClick={() => cycleGarment(activeSlot, 1)}
-            className="flex h-10 items-center justify-center rounded-xl border border-black/[0.06] bg-white/90 text-xl text-zinc-700 shadow-sm disabled:opacity-25 dark:border-white/10 dark:bg-[#111c2e]/90 dark:text-white"
+            className="flex h-10 items-center justify-center rounded-xl border border-black/[0.06] bg-white/90 text-zinc-700 shadow-sm disabled:opacity-25 dark:border-white/10 dark:bg-[#111c2e]/90 dark:text-white"
             aria-label="Prenda siguiente"
           >
-            ›
+            <UiIcon name="chevron-right" className="h-5 w-5" />
           </button>
 
           <button
@@ -247,7 +249,8 @@ export default function OutfitBuilderPage() {
             onClick={randomizeLook}
             className="flex h-10 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/90 px-3 text-[10px] font-extrabold text-zinc-700 shadow-sm disabled:opacity-30 dark:border-white/10 dark:bg-[#111c2e]/90 dark:text-slate-200"
           >
-            ⇄ Aleatorio
+            <UiIcon name="shuffle" className="h-4 w-4" />
+            Aleatorio
           </button>
         </div>
       </section>
@@ -261,15 +264,7 @@ export default function OutfitBuilderPage() {
         </p>
       )}
 
-      <div className="sticky bottom-[72px] z-40 mt-3 grid grid-cols-[44px_1fr_44px] gap-2 rounded-[20px] border border-black/[0.06] bg-white/95 p-2 shadow-[0_12px_35px_rgba(52,36,86,0.16)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0b1525]/95">
-        <button
-          type="button"
-          className="rounded-2xl border border-zinc-200 text-base text-zinc-600 dark:border-white/10 dark:text-slate-300"
-          aria-label="Compartir"
-        >
-          ↥
-        </button>
-
+      <div className="sticky bottom-[72px] z-40 mt-3 rounded-[20px] border border-black/[0.06] bg-white/95 p-2 shadow-[0_12px_35px_rgba(52,36,86,0.16)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#0b1525]/95">
         <button
           type="button"
           disabled={!canSave}
@@ -277,18 +272,9 @@ export default function OutfitBuilderPage() {
             setError(undefined)
             setIsSaveOpen(true)
           }}
-          className="rounded-2xl bg-gradient-to-r from-violet-600 to-pink-500 py-3 text-sm font-extrabold text-white shadow-lg shadow-pink-500/20 disabled:cursor-not-allowed disabled:opacity-35"
+          className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-pink-500 py-3 text-sm font-extrabold text-white shadow-lg shadow-pink-500/20 disabled:cursor-not-allowed disabled:opacity-35"
         >
           Guardar look
-        </button>
-
-        <button
-          type="button"
-          onClick={randomizeLook}
-          className="rounded-2xl border border-zinc-200 text-base text-zinc-600 dark:border-white/10 dark:text-slate-300"
-          aria-label="Aleatorio"
-        >
-          •••
         </button>
       </div>
 
@@ -389,8 +375,8 @@ function LookPiece({
           ].join(' ')}
         />
       ) : (
-        <span className="flex h-full w-full items-center justify-center rounded-[18px] border border-dashed border-zinc-200 text-2xl text-zinc-300 dark:border-white/10 dark:text-slate-600">
-          ＋
+        <span className="flex h-full w-full items-center justify-center rounded-[18px] border border-dashed border-zinc-200 text-zinc-300 dark:border-white/10 dark:text-slate-600">
+          <ClothingIcon kind={slot as ClothingIconKind} className="h-8 w-8 opacity-45" />
         </span>
       )}
     </button>

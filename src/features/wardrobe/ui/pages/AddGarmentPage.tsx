@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router'
 import { createGarment } from '../../application/createGarment'
 import type { GarmentCategory } from '../../domain/Garment'
 import { processGarmentImage } from '../../../../infrastructure/storage/imageProcessor'
+import UiIcon from '../../../../shared/components/UiIcon'
 import ImagePicker from '../components/ImagePicker'
 
 const categoryOptions: Array<{ value: GarmentCategory; label: string }> = [
@@ -92,7 +93,7 @@ export default function AddGarmentPage() {
           className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-zinc-700 shadow-sm ring-1 ring-black/[0.04] dark:bg-[#0d1829] dark:text-white dark:ring-white/[0.06]"
           aria-label="Volver al closet"
         >
-          ←
+          <UiIcon name="arrow-left" className="h-5 w-5" />
         </Link>
         <div className="text-center">
           <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-violet-500">Nueva prenda</p>
@@ -109,7 +110,9 @@ export default function AddGarmentPage() {
             </div>
           ) : (
             <div className="px-2 py-7">
-              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-3xl shadow-md dark:bg-[#111c2e]">📷</div>
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-violet-600 shadow-md dark:bg-[#111c2e] dark:text-fuchsia-300">
+                <UiIcon name="camera" className="h-8 w-8" strokeWidth={1.7} />
+              </div>
               <h2 className="mt-4 text-base font-extrabold text-zinc-900 dark:text-white">Toma una foto</h2>
               <p className="mt-1 text-xs text-zinc-500 dark:text-slate-400">o selecciona una imagen de tu galería</p>
             </div>
@@ -158,7 +161,12 @@ export default function AddGarmentPage() {
 
         {!image && (
           <div className="mt-4 rounded-[22px] border border-black/[0.04] bg-white p-5 shadow-sm dark:border-white/[0.07] dark:bg-[#0d1829]">
-            <p className="text-sm font-extrabold text-zinc-900 dark:text-white">Tips para una mejor foto ✨</p>
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-fuchsia-300">
+                <UiIcon name="sparkles" className="h-4 w-4" />
+              </span>
+              <p className="text-sm font-extrabold text-zinc-900 dark:text-white">Tips para una mejor foto</p>
+            </div>
             <ul className="mt-3 space-y-2 text-xs leading-5 text-zinc-500 dark:text-slate-400">
               <li>• Usa un fondo limpio.</li>
               <li>• Procura tener buena iluminación.</li>

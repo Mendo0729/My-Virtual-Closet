@@ -1,4 +1,5 @@
 import BrandMark from '../../../shared/components/BrandMark'
+import UiIcon, { type UiIconName } from '../../../shared/components/UiIcon'
 import { useTheme } from '../../../shared/theme/ThemeProvider'
 
 export default function SettingsPage() {
@@ -16,7 +17,7 @@ export default function SettingsPage() {
         <div className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/15 blur-2xl" />
         <div className="relative z-10 flex items-center justify-between gap-4">
           <div>
-            <p className="text-base font-extrabold">Tu estilo, tu historia 💜</p>
+            <p className="text-base font-extrabold">Tu estilo, a tu manera</p>
             <p className="mt-1 text-xs text-white/80">Haz que My Virtual Closet se sienta tuyo.</p>
           </div>
           <div className="rounded-2xl bg-white/14 p-2 backdrop-blur">
@@ -34,7 +35,9 @@ export default function SettingsPage() {
             className="flex w-full items-center justify-between gap-4 border-b border-zinc-100 px-4 py-4 text-left dark:border-white/[0.06]"
           >
             <div className="flex items-center gap-3">
-              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-violet-50 text-lg dark:bg-violet-500/10">{isDark ? '🌙' : '☀️'}</span>
+              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-fuchsia-300">
+                <UiIcon name={isDark ? 'moon' : 'sun'} className="h-5 w-5" />
+              </span>
               <div>
                 <p className="text-sm font-extrabold text-zinc-900 dark:text-white">Tema</p>
                 <p className="mt-0.5 text-[10px] text-zinc-400 dark:text-slate-500">{isDark ? 'Oscuro' : 'Claro'}</p>
@@ -52,9 +55,9 @@ export default function SettingsPage() {
             </span>
           </button>
 
-          <SettingsRow icon="💾" title="Almacenamiento local" subtitle="Prendas, imágenes y looks en este dispositivo" />
-          <SettingsRow icon="☁️" title="Copia de seguridad" subtitle="Disponible en una próxima versión" />
-          <SettingsRow icon="ⓘ" title="Acerca de la app" subtitle="My Virtual Closet · Versión 0.1.0" last />
+          <SettingsRow icon="database" title="Almacenamiento local" subtitle="Prendas, imágenes y looks en este dispositivo" />
+          <SettingsRow icon="cloud" title="Copia de seguridad" subtitle="Disponible en una próxima versión" />
+          <SettingsRow icon="info" title="Acerca de la app" subtitle="My Virtual Closet · Versión 0.1.0" last />
         </div>
       </section>
 
@@ -77,14 +80,16 @@ function SettingsRow({
   subtitle,
   last = false,
 }: {
-  icon: string
+  icon: UiIconName
   title: string
   subtitle: string
   last?: boolean
 }) {
   return (
     <div className={['flex items-center gap-3 px-4 py-4', last ? '' : 'border-b border-zinc-100 dark:border-white/[0.06]'].join(' ')}>
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-zinc-50 text-base dark:bg-white/[0.04]">{icon}</span>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-zinc-50 text-zinc-600 dark:bg-white/[0.04] dark:text-slate-300">
+        <UiIcon name={icon} className="h-4.5 w-4.5" />
+      </span>
       <div className="min-w-0">
         <p className="text-sm font-extrabold text-zinc-900 dark:text-white">{title}</p>
         <p className="mt-0.5 truncate text-[10px] text-zinc-400 dark:text-slate-500">{subtitle}</p>

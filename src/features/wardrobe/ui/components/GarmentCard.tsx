@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '../../../../infrastructure/database/db'
+import ClothingIcon from '../../../../shared/components/ClothingIcon'
 import type { Garment } from '../../domain/Garment'
 
 const categoryLabels: Record<Garment['category'], string> = {
@@ -8,6 +9,13 @@ const categoryLabels: Record<Garment['category'], string> = {
   bottom: 'Bottom',
   shoes: 'Zapatos',
   accessory: 'Accesorio',
+}
+
+const categoryTone: Record<Garment['category'], string> = {
+  top: 'text-violet-500 dark:text-violet-300',
+  bottom: 'text-indigo-500 dark:text-indigo-300',
+  shoes: 'text-pink-500 dark:text-pink-300',
+  accessory: 'text-amber-500 dark:text-amber-300',
 }
 
 interface GarmentCardProps {
@@ -36,7 +44,9 @@ export default function GarmentCard({ garment }: GarmentCardProps) {
         {imageUrl ? (
           <img src={imageUrl} alt={garment.name} className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full items-center justify-center text-4xl">👕</div>
+          <div className={`flex h-full items-center justify-center ${categoryTone[garment.category]}`}>
+            <ClothingIcon kind={garment.category} className="h-16 w-16 opacity-80" />
+          </div>
         )}
       </div>
 

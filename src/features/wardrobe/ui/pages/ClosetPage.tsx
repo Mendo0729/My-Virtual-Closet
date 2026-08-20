@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { Link } from 'react-router'
 import { db } from '../../../../infrastructure/database/db'
+import ClothingIcon from '../../../../shared/components/ClothingIcon'
 import GarmentCard from '../components/GarmentCard'
 
 type ClosetFilter = 'all' | 'top' | 'bottom' | 'shoes' | 'accessory'
@@ -40,7 +41,7 @@ export default function ClosetPage() {
           to="/closet/new"
           className="flex h-10 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-violet-600 to-pink-500 px-4 text-xs font-extrabold text-white shadow-lg shadow-pink-500/15 transition active:scale-[0.98]"
         >
-          <span className="text-base leading-none">＋</span>
+          <span className="text-base leading-none" aria-hidden="true">＋</span>
           Prenda
         </Link>
       </header>
@@ -74,7 +75,9 @@ export default function ClosetPage() {
 
       {isEmpty && (
         <div className="mt-6 rounded-[24px] border border-dashed border-zinc-200 bg-white px-6 py-12 text-center dark:border-white/10 dark:bg-[#0d1829]">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-violet-50 text-3xl dark:bg-violet-500/10">👕</div>
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-300">
+            <ClothingIcon kind="top" className="h-10 w-10" />
+          </div>
           <h2 className="mt-4 font-extrabold text-zinc-900 dark:text-white">Tu closet está vacío</h2>
           <p className="mt-2 text-sm leading-6 text-zinc-500 dark:text-slate-400">Toma una foto de tu primera prenda para comenzar.</p>
           <Link
