@@ -7,81 +7,31 @@ const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL?.trim() || ''
 const MAX_BODY_BYTES = 12 * 1024 * 1024
 const OPENROUTER_TIMEOUT_MS = 30_000
 
-const schema = {
-  type: 'object',
-  properties: {
-    garmentPresent: { type: 'boolean' },
-    category: { type: 'string', enum: ['top', 'bottom', 'shoes', 'accessory', 'unknown'] },
-    suggestedName: { type: 'string' },
-    primaryColor: { type: 'string' },
-    confidence: { type: 'number', minimum: 0, maximum: 1 },
-    boundingBox: {
-      type: 'object',
-      properties: {
-        x1: { type: 'number', minimum: 0, maximum: 1 },
-        y1: { type: 'number', minimum: 0, maximum: 1 },
-        x2: { type: 'number', minimum: 0, maximum: 1 },
-        y2: { type: 'number', minimum: 0, maximum: 1 },
-      },
-      required: ['x1', 'y1', 'x2', 'y2'],
-      additionalProperties: false,
-    },
-    foregroundPoints: {
-      type: 'array',
-      minItems: 3,
-      maxItems: 10,
-      items: {
-        type: 'object',
-        properties: {
-          x: { type: 'number', minimum: 0, maximum: 1 },
-          y: { type: 'number', minimum: 0, maximum: 1 },
-        },
-        required: ['x', 'y'],
-        additionalProperties: false,
-      },
-    },
-    backgroundPoints: {
-      type: 'array',
-      minItems: 3,
-      maxItems: 10,
-      items: {
-        type: 'object',
-        properties: {
-          x: { type: 'number', minimum: 0, maximum: 1 },
-          y: { type: 'number', minimum: 0, maximum: 1 },
-        },
-        required: ['x', 'y'],
-        additionalProperties: false,
-      },
-    },
-  },
-  required: [
-    'garmentPresent',
-    'category',
-    'suggestedName',
-    'primaryColor',
-    'confidence',
-    'boundingBox',
-    'foregroundPoints',
-    'backgroundPoints',
-  ],
-  additionalProperties: false,
-}
-
 const prompt = `Analyze the main garment in this image for a background-removal algorithm.
-Return only the requested structured JSON.
+Return ONLY one valid JSON object with exactly this shape:
+{
+  "garmentPresent": true,
+  "category": "top|bottom|shoes|accessory|unknown",
+  "suggestedName": "short garment name",
+  "primaryColor": "main garment color",
+  "confidence": 0.0,
+  "boundingBox": { "x1": 0.0, "y1": 0.0, "x2": 1.0, "y2": 1.0 },
+  "foregroundPoints": [{ "x": 0.0, "y": 0.0 }],
+  "backgroundPoints": [{ "x": 0.0, "y": 0.0 }]
+}
 
 Rules:
 - Coordinates are normalized from 0 to 1 relative to the full image.
 - boundingBox must tightly contain the complete garment, including sleeves, straps, laces, heels, handles, and other thin parts.
-- foregroundPoints must be clearly inside different parts of the garment. Spread them across the object, not all in the center.
-- backgroundPoints must be clearly outside the garment and represent different visible background regions.
+- Return 5 to 8 foregroundPoints clearly inside different parts of the garment. Spread them across the object.
+- Return 5 to 8 backgroundPoints clearly outside the garment and across different background regions.
 - Never place a foreground point on a person, hand, hanger, chair, wall, floor, shadow, or another object.
 - Never place a background point on the garment.
 - If there is one obvious garment, garmentPresent must be true even if the background is complex.
 - category must be top, bottom, shoes, accessory, or unknown.
-- suggestedName and primaryColor should describe the garment, not the background.
-- confidence describes confidence in the localization, not fashion classification.`
+- suggestedName and primaryColor must describe the garment, not the background.
+- confidence is confidence in garment localization from 0 to 1.
+- Do not include markdown, code fences, comments, or text outside the JSON object.`
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
@@ -200,12 +150,7 @@ async function analyzeWithOpenRouter(imageDataUrl) {
           },
         ],
         response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: 'garment_segmentation_guidance',
-            strict: true,
-            schema,
-          },
+          type: 'json_object',
         },
       }),
     })
