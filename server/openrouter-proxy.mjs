@@ -2,10 +2,11 @@ import http from 'node:http'
 
 const PORT = Number(process.env.PORT || 8787)
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY?.trim() || ''
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL?.trim() || 'google/gemma-4-31b-it:free'
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL?.trim() || 'openrouter/free'
 const OPENROUTER_SITE_URL = process.env.OPENROUTER_SITE_URL?.trim() || ''
 const MAX_BODY_BYTES = 12 * 1024 * 1024
 const OPENROUTER_TIMEOUT_MS = 30_000
+const OPENROUTER_MAX_ATTEMPTS = 3
 
 const prompt = `Analyze the main garment in this image for a background-removal algorithm.
 Return ONLY one valid JSON object with exactly this shape:
@@ -61,6 +62,10 @@ function readBody(request) {
   })
 }
 
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
 function sanitizePoint(point) {
   if (!point || typeof point.x !== 'number' || typeof point.y !== 'number') {
     return null
@@ -108,30 +113,93 @@ function sanitizeAnalysis(value) {
   }
 }
 
-async function analyzeWithOpenRouter(imageDataUrl) {
-  if (!OPENROUTER_API_KEY) {
-    throw new Error('OPENROUTER_API_KEY no está configurada en el servidor.')
+function getMessageText(message) {
+  const content = message?.content
+
+  if (typeof content === 'string') {
+    return content.trim()
   }
 
-  if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(imageDataUrl)) {
-    throw new Error('Formato de imagen no soportado.')
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === 'string') return part
+        if (typeof part?.text === 'string') return part.text
+        return ''
+      })
+      .join('\n')
+      .trim()
+  }
+
+  return ''
+}
+
+function parseJsonObject(text) {
+  if (!text) {
+    throw new Error('OpenRouter no devolvió análisis de la imagen.')
+  }
+
+  let normalized = text.trim()
+
+  if (normalized.startsWith('```')) {
+    normalized = normalized
+      .replace(/^```(?:json)?\s*/i, '')
+      .replace(/\s*```$/, '')
+      .trim()
+  }
+
+  try {
+    return JSON.parse(normalized)
+  } catch {
+    const firstBrace = normalized.indexOf('{')
+    const lastBrace = normalized.lastIndexOf('}')
+
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      return JSON.parse(normalized.slice(firstBrace, lastBrace + 1))
+    }
+
+    throw new Error('OpenRouter devolvió texto, pero no un JSON válido.')
+  }
+}
+
+function compactDiagnostic(payload) {
+  const choice = payload?.choices?.[0]
+  const message = choice?.message || {}
+  const reasoningTokens =
+    payload?.usage?.completion_tokens_details?.reasoning_tokens ??
+    payload?.usage?.completionTokensDetails?.reasoningTokens ??
+    null
+
+  return {
+    model: payload?.model || OPENROUTER_MODEL,
+    finishReason: choice?.finish_reason ?? null,
+    contentType: Array.isArray(message.content) ? 'array' : typeof message.content,
+    contentLength:
+      typeof message.content === 'string'
+        ? message.content.length
+        : Array.isArray(message.content)
+          ? message.content.length
+          : 0,
+    hasReasoning: Boolean(message.reasoning || message.reasoning_details),
+    reasoningTokens,
+  }
+}
+
+async function requestOpenRouter(imageDataUrl) {
+  const headers = {
+    Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+    'Content-Type': 'application/json',
+    'X-Title': 'My Virtual Closet',
+  }
+
+  if (OPENROUTER_SITE_URL) {
+    headers['HTTP-Referer'] = OPENROUTER_SITE_URL
   }
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), OPENROUTER_TIMEOUT_MS)
-  const startedAt = performance.now()
 
   try {
-    const headers = {
-      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
-      'Content-Type': 'application/json',
-      'X-Title': 'My Virtual Closet',
-    }
-
-    if (OPENROUTER_SITE_URL) {
-      headers['HTTP-Referer'] = OPENROUTER_SITE_URL
-    }
-
     const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers,
@@ -139,7 +207,7 @@ async function analyzeWithOpenRouter(imageDataUrl) {
       body: JSON.stringify({
         model: OPENROUTER_MODEL,
         temperature: 0.1,
-        max_tokens: 600,
+        max_tokens: 1200,
         messages: [
           {
             role: 'user',
@@ -149,8 +217,8 @@ async function analyzeWithOpenRouter(imageDataUrl) {
             ],
           },
         ],
-        response_format: {
-          type: 'json_object',
+        provider: {
+          allow_fallbacks: true,
         },
       }),
     })
@@ -158,28 +226,80 @@ async function analyzeWithOpenRouter(imageDataUrl) {
     const raw = await response.text()
 
     if (!response.ok) {
-      throw new Error(`OpenRouter respondió HTTP ${response.status}: ${raw.slice(0, 300)}`)
+      const error = new Error(`OpenRouter respondió HTTP ${response.status}: ${raw.slice(0, 300)}`)
+      error.statusCode = response.status
+      throw error
     }
 
-    const payload = JSON.parse(raw)
-    const content = payload?.choices?.[0]?.message?.content
-
-    if (typeof content !== 'string' || content.length === 0) {
-      throw new Error('OpenRouter no devolvió análisis de la imagen.')
-    }
-
-    const parsed = JSON.parse(content)
-    const analysis = sanitizeAnalysis(parsed)
-
-    return {
-      analysis,
-      model: payload.model || OPENROUTER_MODEL,
-      latencyMs: Math.round(performance.now() - startedAt),
-      usage: payload.usage || null,
-    }
+    return JSON.parse(raw)
   } finally {
     clearTimeout(timeout)
   }
+}
+
+async function analyzeWithOpenRouter(imageDataUrl) {
+  if (!OPENROUTER_API_KEY) {
+    throw new Error('OPENROUTER_API_KEY no está configurada en el servidor.')
+  }
+
+  if (!/^data:image\/(jpeg|jpg|png|webp);base64,/i.test(imageDataUrl)) {
+    throw new Error('Formato de imagen no soportado.')
+  }
+
+  const startedAt = performance.now()
+  let lastError
+
+  for (let attempt = 1; attempt <= OPENROUTER_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const payload = await requestOpenRouter(imageDataUrl)
+      const diagnostic = compactDiagnostic(payload)
+      const message = payload?.choices?.[0]?.message
+      const content = getMessageText(message)
+
+      if (!content) {
+        console.warn(
+          `[openrouter-proxy] empty response attempt=${attempt}/${OPENROUTER_MAX_ATTEMPTS}`,
+          diagnostic,
+        )
+        throw new Error('OpenRouter no devolvió análisis de la imagen.')
+      }
+
+      const parsed = parseJsonObject(content)
+      const analysis = sanitizeAnalysis(parsed)
+      const latencyMs = Math.round(performance.now() - startedAt)
+
+      console.log(
+        `[openrouter-proxy] success model=${diagnostic.model} latency=${latencyMs}ms finish=${diagnostic.finishReason ?? 'unknown'} attempt=${attempt}`,
+      )
+
+      return {
+        analysis,
+        model: diagnostic.model,
+        latencyMs,
+        usage: payload.usage || null,
+      }
+    } catch (error) {
+      lastError = error
+      const statusCode = error?.statusCode
+      const retryable =
+        attempt < OPENROUTER_MAX_ATTEMPTS &&
+        (statusCode === 429 ||
+          (typeof statusCode === 'number' && statusCode >= 500) ||
+          !statusCode)
+
+      if (!retryable) {
+        throw error
+      }
+
+      const delayMs = 750 * 2 ** (attempt - 1)
+      console.warn(
+        `[openrouter-proxy] retrying attempt=${attempt + 1}/${OPENROUTER_MAX_ATTEMPTS} after=${delayMs}ms reason=${error instanceof Error ? error.message : 'unknown'}`,
+      )
+      await wait(delayMs)
+    }
+  }
+
+  throw lastError || new Error('OpenRouter no pudo analizar la imagen.')
 }
 
 const server = http.createServer(async (request, response) => {
