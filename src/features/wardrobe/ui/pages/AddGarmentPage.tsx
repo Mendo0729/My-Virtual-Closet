@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router'
 import { createGarment } from '../../application/createGarment'
 import type { GarmentCategory } from '../../domain/Garment'
 import {
-  BACKGROUND_REMOVAL_MODEL,
   analyzeGarmentForCutout,
   removeGarmentBackgroundFromMap,
   type GeminiSegmentationResult,
@@ -27,8 +26,6 @@ const transparentPreviewStyle = {
   backgroundSize: '16px 16px',
 }
 
-type BackgroundRemovalMethod = 'ai' | 'local'
-
 export default function AddGarmentPage() {
   const navigate = useNavigate()
   const imageSelectionVersion = useRef(0)
@@ -41,13 +38,10 @@ export default function AddGarmentPage() {
   const [cutoutSource, setCutoutSource] = useState<Blob>()
   const [geminiMap, setGeminiMap] = useState<GeminiSegmentationResult>()
   const [isAiMapping, setIsAiMapping] = useState(false)
-  const [aiMappingNote, setAiMappingNote] = useState<string>()
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [isBackgroundRemoved, setIsBackgroundRemoved] = useState(false)
-  const [backgroundRemovalMethod, setBackgroundRemovalMethod] = useState<BackgroundRemovalMethod>()
   const [backgroundRemovalNote, setBackgroundRemovalNote] = useState<string>()
   const [isProcessing, setIsProcessing] = useState(false)
-  const [processingLabel, setProcessingLabel] = useState('Optimizando imagen…')
   const [isSaving, setIsSaving] = useState(false)
   const [error, setError] = useState<string>()
 
@@ -74,12 +68,9 @@ export default function AddGarmentPage() {
 
     setError(undefined)
     setGeminiMap(undefined)
-    setAiMappingNote(undefined)
     setIsAiMapping(false)
     setIsProcessing(true)
-    setProcessingLabel('Optimizando imagen…')
     setIsBackgroundRemoved(false)
-    setBackgroundRemovalMethod(undefined)
     setBackgroundRemovalNote(undefined)
 
     let processedImage: Blob
@@ -94,9 +85,9 @@ export default function AddGarmentPage() {
       setCutoutSource(file)
       setOriginalImage(processedImage)
       setImage(processedImage)
-    } catch (imageError) {
+    } catch {
       if (selectionVersion === imageSelectionVersion.current) {
-        setError(imageError instanceof Error ? imageError.message : 'No se pudo procesar la imagen.')
+        setError('No se pudo cargar la imagen. Intenta nuevamente con otra foto.')
       }
       return
     } finally {
@@ -110,11 +101,11 @@ export default function AddGarmentPage() {
     }
 
     setIsAiMapping(true)
-    setAiMappingNote('Analizando la prenda y preparando el mapa de corte…')
 
     try {
-      // This is the only Gemini request for the selected photo. The returned
-      // coordinates stay in memory and every cut/re-cut reuses them locally.
+      // The remote model is consulted once for the selected photo. If it is
+      // unavailable, the user-facing flow stays the same and local processing
+      // remains available transparently.
       const map = await analyzeGarmentForCutout(processedImage)
 
       if (selectionVersion !== imageSelectionVersion.current) {
@@ -122,15 +113,13 @@ export default function AddGarmentPage() {
       }
 
       setGeminiMap(map)
-      setAiMappingNote(`Mapa IA listo · ${map.segmentation.label}`)
     } catch (mappingError) {
       if (selectionVersion !== imageSelectionVersion.current) {
         return
       }
 
-      console.warn('Gemini garment mapping failed. Local cutout remains available.', mappingError)
+      console.warn('Garment mapping failed. Local cutout remains available.', mappingError)
       setGeminiMap(undefined)
-      setAiMappingNote('No se pudo crear el mapa IA. El recorte local sigue disponible.')
     } finally {
       if (selectionVersion === imageSelectionVersion.current) {
         setIsAiMapping(false)
@@ -148,7 +137,6 @@ export default function AddGarmentPage() {
     setError(undefined)
     setBackgroundRemovalNote(undefined)
     setIsProcessing(true)
-    setProcessingLabel(geminiMap ? 'Recortando con el mapa IA ya generado…' : 'Aplicando recorte local…')
 
     try {
       if (geminiMap) {
@@ -160,28 +148,20 @@ export default function AddGarmentPage() {
           )
           setImage(transparentImage)
           setIsBackgroundRemoved(true)
-          setBackgroundRemovalMethod('ai')
-          setBackgroundRemovalNote(
-            `Recorte generado con mapa IA · ${geminiMap.segmentation.label} · sin nueva llamada a Gemini`,
-          )
+          setBackgroundRemovalNote('Fondo eliminado correctamente.')
           return
         } catch (mappedCutoutError) {
-          console.warn('Mapped background removal failed. Falling back to local processing.', mappedCutoutError)
-          setProcessingLabel('El mapa no pudo aplicarse. Usando recorte local…')
+          console.warn('Mapped background removal failed. Continuing with local processing.', mappedCutoutError)
         }
       }
 
       const transparentImage = await removeGarmentBackground(source)
       setImage(transparentImage)
       setIsBackgroundRemoved(true)
-      setBackgroundRemovalMethod('local')
-      setBackgroundRemovalNote(
-        geminiMap
-          ? 'El mapa IA no pudo aplicarse; se usó el recorte local como respaldo.'
-          : 'Se aplicó el recorte local porque no había un mapa IA disponible.',
-      )
+      setBackgroundRemovalNote('Fondo eliminado correctamente.')
     } catch (imageError) {
-      setError(imageError instanceof Error ? imageError.message : 'No se pudo quitar el fondo de la imagen.')
+      console.error('Background removal failed.', imageError)
+      setError('No se pudo quitar el fondo de la imagen. Intenta nuevamente o usa otra foto.')
     } finally {
       setIsProcessing(false)
     }
@@ -195,7 +175,6 @@ export default function AddGarmentPage() {
     setError(undefined)
     setImage(originalImage)
     setIsBackgroundRemoved(false)
-    setBackgroundRemovalMethod(undefined)
     setBackgroundRemovalNote(undefined)
   }
 
@@ -269,15 +248,9 @@ export default function AddGarmentPage() {
             </div>
           )}
 
-          {isProcessing && (
+          {(isProcessing || isAiMapping) && (
             <p className="mt-4 text-sm font-bold text-violet-600 dark:text-fuchsia-300" role="status">
-              {processingLabel}
-            </p>
-          )}
-
-          {isAiMapping && !isProcessing && (
-            <p className="mt-4 text-sm font-bold text-violet-600 dark:text-fuchsia-300" role="status">
-              Analizando mapa de la prenda con Gemini…
+              Cargando…
             </p>
           )}
 
@@ -293,8 +266,8 @@ export default function AddGarmentPage() {
                   className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-zinc-950 px-4 py-3 text-xs font-extrabold text-white transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-white dark:text-zinc-950"
                 >
                   <UiIcon name="sparkles" className="h-4 w-4" />
-                  {isAiMapping
-                    ? 'Preparando mapa IA…'
+                  {isProcessing || isAiMapping
+                    ? 'Cargando…'
                     : isBackgroundRemoved
                       ? 'Recortar de nuevo'
                       : 'Quitar fondo'}
@@ -312,28 +285,9 @@ export default function AddGarmentPage() {
                 )}
               </div>
 
-              {aiMappingNote && !backgroundRemovalNote && (
-                <p
-                  className={`mt-2 rounded-xl px-3 py-2 text-[11px] font-semibold leading-4 ${
-                    isAiMapping
-                      ? 'bg-violet-50 text-violet-700 dark:bg-violet-500/10 dark:text-violet-300'
-                      : geminiMap
-                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                        : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
-                  }`}
-                  role="status"
-                >
-                  {aiMappingNote}
-                </p>
-              )}
-
               {backgroundRemovalNote && (
                 <p
-                  className={`mt-2 rounded-xl px-3 py-2 text-[11px] font-semibold leading-4 ${
-                    backgroundRemovalMethod === 'ai'
-                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-                      : 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
-                  }`}
+                  className="mt-2 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] font-semibold leading-4 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
                   role="status"
                 >
                   {backgroundRemovalNote}
@@ -342,12 +296,8 @@ export default function AddGarmentPage() {
 
               <p className="mt-2 px-2 text-[11px] leading-4 text-zinc-500 dark:text-slate-400">
                 {isBackgroundRemoved
-                  ? 'El recorte se guardará con transparencia. Recortar de nuevo reutiliza el mismo mapa y no vuelve a llamar a Gemini.'
-                  : isAiMapping
-                    ? 'Gemini se consulta una sola vez al cargar esta foto para crear el mapa de coordenadas.'
-                    : geminiMap
-                      ? `Mapa IA listo con ${BACKGROUND_REMOVAL_MODEL}. El botón de recorte trabaja localmente y no hace otra llamada.`
-                      : 'Si Gemini no puede crear el mapa, el recorte local queda disponible como respaldo.'}
+                  ? 'El recorte se guardará con transparencia. Puedes volver a la foto original antes de guardar.'
+                  : 'Procesaremos la imagen automáticamente para preparar la prenda.'}
               </p>
             </div>
           )}
@@ -377,7 +327,7 @@ export default function AddGarmentPage() {
 
             <button
               type="submit"
-              disabled={isSaving || isProcessing}
+              disabled={isSaving || isProcessing || isAiMapping}
               className="w-full rounded-2xl bg-gradient-to-r from-violet-600 to-pink-500 px-4 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-pink-500/15 transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSaving ? 'Guardando…' : 'Guardar prenda'}
