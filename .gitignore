@@ -9,3 +9,6 @@ Thumbs.db
 .idea/
 coverage/
 *.log
+
+# Generated from src/assets/logo-my-virtual-closet.png by pnpm pwa:prepare
+public/icons/logo-my-virtual-closet.png
