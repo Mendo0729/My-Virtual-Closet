@@ -1,13 +1,18 @@
 export interface GeminiGarmentSegmentation {
   box_2d: [number, number, number, number]
   mask: Array<[number, number]>
+  foreground_points?: Array<[number, number]>
+  background_points?: Array<[number, number]>
+  confidence?: number
   label: string
 }
 
 export interface GeminiSegmentationResult {
   segmentation: GeminiGarmentSegmentation
+  provider?: 'openrouter' | 'gemini'
   model: string
   latencyMs: number
+  costUsd?: number
 }
 
 const REQUEST_TIMEOUT_MS = 35_000
@@ -26,7 +31,7 @@ function loadImage(source: Blob) {
 
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl)
-      reject(new Error('No se pudo preparar la imagen para Gemini.'))
+      reject(new Error('No se pudo preparar la imagen para el análisis de IA.'))
     }
 
     image.src = objectUrl
@@ -40,7 +45,7 @@ function canvasToBlob(canvas: HTMLCanvasElement) {
         if (blob) {
           resolve(blob)
         } else {
-          reject(new Error('No se pudo comprimir la imagen para Gemini.'))
+          reject(new Error('No se pudo comprimir la imagen para el análisis de IA.'))
         }
       },
       'image/jpeg',
@@ -64,7 +69,7 @@ async function prepareAnalysisImage(source: Blob) {
 
   const context = canvas.getContext('2d')
   if (!context) {
-    throw new Error('El navegador no pudo preparar la imagen para Gemini.')
+    throw new Error('El navegador no pudo preparar la imagen para el análisis de IA.')
   }
 
   context.drawImage(image, 0, 0, width, height)
@@ -79,11 +84,11 @@ function blobToDataUrl(blob: Blob) {
       if (typeof reader.result === 'string') {
         resolve(reader.result)
       } else {
-        reject(new Error('No se pudo codificar la imagen para Gemini.'))
+        reject(new Error('No se pudo codificar la imagen para el análisis de IA.'))
       }
     }
 
-    reader.onerror = () => reject(new Error('No se pudo leer la imagen para Gemini.'))
+    reader.onerror = () => reject(new Error('No se pudo leer la imagen para el análisis de IA.'))
     reader.readAsDataURL(blob)
   })
 }
@@ -110,17 +115,17 @@ export async function segmentGarmentWithGemini(source: Blob): Promise<GeminiSegm
       | null
 
     if (!response.ok) {
-      throw new Error(payload?.error || `Gemini respondió HTTP ${response.status}.`)
+      throw new Error(payload?.error || `El servicio de IA respondió HTTP ${response.status}.`)
     }
 
     if (!payload?.segmentation?.box_2d || !Array.isArray(payload.segmentation.mask)) {
-      throw new Error('Gemini devolvió una respuesta de segmentación incompleta.')
+      throw new Error('La IA devolvió una respuesta de segmentación incompleta.')
     }
 
     return payload
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new Error('Gemini tardó demasiado en segmentar la prenda.')
+      throw new Error('La IA tardó demasiado en segmentar la prenda.')
     }
 
     throw error
