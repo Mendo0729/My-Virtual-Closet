@@ -1,0 +1,64 @@
+name: my-virtual-closet-prod
+
+services:
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: my-virtual-closet-web:latest
+    container_name: my-virtual-closet
+
+    depends_on:
+      ai-proxy:
+        condition: service_healthy
+
+    networks:
+      - mvc-prod
+      - proxy
+
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    cpus: "0.50"
+    mem_limit: 256m
+
+  ai-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.ai
+    image: my-virtual-closet-ai-proxy:latest
+    container_name: my-virtual-closet-ai-proxy-prod
+
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?GEMINI_API_KEY is required}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      PORT: "8787"
+
+    expose:
+      - "8787"
+
+    networks:
+      mvc-prod:
+        aliases:
+          - ai-proxy
+
+    restart: unless-stopped
+
+    security_opt:
+      - no-new-privileges:true
+
+    cpus: "0.50"
+    mem_limit: 256m
+
+networks:
+
+  mvc-prod:
+    name: my-virtual-closet-prod
+    driver: bridge
+
+  proxy:
+    external: true
+    name: proxy
