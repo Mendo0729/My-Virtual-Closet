@@ -1,4 +1,4 @@
-export type GarmentCategory = 'top' | 'bottom' | 'shoes' | 'jacket' | 'accessory'
+export type GarmentCategory = 'top' | 'bottom' | 'shoes' | 'accessory'
 
 export interface Garment {
   id: string
