@@ -1,4 +1,5 @@
 const CACHE_NAME = 'my-virtual-closet-v1'
+const CACHE_PREFIX = 'my-virtual-closet-'
 const APP_SHELL_URLS = ['/', '/manifest.webmanifest', '/icons/logo-my-virtual-closet.png']
 
 const isCacheableAsset = (request) =>
@@ -40,7 +41,13 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+            .map((key) => caches.delete(key)),
+        ),
+      )
       .then(() => self.clients.claim()),
   )
 })
