@@ -10,10 +10,10 @@ import type { OutfitCategory, OutfitSlot } from '../../domain/Outfit'
 import GarmentImage from '../components/GarmentImage'
 
 const slotDefinitions: Array<{ slot: OutfitSlot; label: string; icon: ClothingIconKind }> = [
-  { slot: 'top', label: 'Tops', icon: 'top' },
-  { slot: 'bottom', label: 'Bottoms', icon: 'bottom' },
-  { slot: 'shoes', label: 'Calzado', icon: 'shoes' },
-  { slot: 'accessory', label: 'Accesorios', icon: 'accessory' },
+  { slot: 'top', label: 'Top', icon: 'top' },
+  { slot: 'bottom', label: 'Bottom', icon: 'bottom' },
+  { slot: 'shoes', label: 'Zapatos', icon: 'shoes' },
+  { slot: 'accessory', label: 'Accesorio', icon: 'accessory' },
 ]
 
 const categoryOptions: Array<{ value: OutfitCategory; label: string }> = [
@@ -92,6 +92,7 @@ export default function OutfitBuilderPage() {
     [],
   )
 
+  const activeDefinition = slotDefinitions.find((definition) => definition.slot === activeSlot) ?? slotDefinitions[0]
   const activeGarment = selectedGarment(activeSlot)
   const activeTotal = garmentsBySlot[activeSlot].length
   const activeIndex = getSafeIndex(activeSlot)
@@ -136,9 +137,12 @@ export default function OutfitBuilderPage() {
           <UiIcon name="arrow-left" className="h-5 w-5" />
         </Link>
 
-        <h1 className="text-center text-base font-extrabold tracking-tight text-zinc-950 dark:text-white">
-          Crear Outfit
-        </h1>
+        <div className="text-center">
+          <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-violet-500 dark:text-fuchsia-400">Combina tu closet</p>
+          <h1 className="mt-0.5 text-base font-extrabold tracking-tight text-zinc-950 dark:text-white">
+            Crear Outfit
+          </h1>
+        </div>
 
         <button
           type="button"
@@ -150,93 +154,72 @@ export default function OutfitBuilderPage() {
         </button>
       </header>
 
-      <div className="mt-3 grid grid-cols-4 gap-1.5">
-        {slotDefinitions.map((definition) => {
-          const active = definition.slot === activeSlot
-          const count = garmentsBySlot[definition.slot].length
-
-          return (
-            <button
-              key={definition.slot}
-              type="button"
-              onClick={() => setActiveSlot(definition.slot)}
-              className={[
-                'flex min-w-0 flex-col items-center gap-1 rounded-2xl px-1 py-2 text-[9px] font-bold transition',
-                active
-                  ? 'bg-violet-50 text-violet-600 ring-1 ring-violet-200 dark:bg-violet-500/15 dark:text-fuchsia-300 dark:ring-violet-400/20'
-                  : 'text-zinc-500 dark:text-slate-500',
-              ].join(' ')}
-            >
-              <ClothingIcon kind={definition.icon} className="h-6 w-6" />
-              <span className="max-w-full truncate">{definition.label}</span>
-              <span className="text-[8px] font-semibold opacity-60">{count}</span>
-            </button>
-          )
-        })}
-      </div>
-
-      <section className="mt-3 rounded-[28px] border border-black/[0.04] bg-gradient-to-b from-[#fffdfd] via-[#fbf9ff] to-[#fff7fc] p-3 shadow-[0_18px_50px_rgba(57,35,94,0.08)] dark:border-white/[0.07] dark:from-[#0b1525] dark:via-[#091321] dark:to-[#0d1321]">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2 rounded-full bg-white/85 px-3 py-1.5 text-[10px] font-bold text-zinc-600 shadow-sm backdrop-blur dark:bg-white/5 dark:text-slate-300">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-gradient-to-r from-violet-500 to-pink-500" />
-            <span className="truncate">{activeGarment ? activeGarment.name : 'Sin prenda'}</span>
+      <section className="mt-4 rounded-[28px] border border-black/[0.05] bg-gradient-to-b from-white via-[#fdfcff] to-[#fff9fc] p-3 shadow-[0_18px_50px_rgba(57,35,94,0.08)] dark:border-white/[0.07] dark:from-[#0b1525] dark:via-[#091321] dark:to-[#0d1321]">
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+          <div className="min-w-0">
+            <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-zinc-400 dark:text-slate-500">Seleccionado</p>
+            <p className="mt-0.5 truncate text-xs font-extrabold text-zinc-800 dark:text-white">
+              {activeDefinition.label} · {activeGarment?.name ?? 'Sin prenda'}
+            </p>
           </div>
 
           {activeTotal > 0 && (
-            <span className="shrink-0 text-[10px] font-bold tabular-nums text-zinc-400 dark:text-slate-500">
+            <span className="shrink-0 rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-extrabold tabular-nums text-zinc-500 dark:bg-white/[0.06] dark:text-slate-400">
               {activeIndex + 1}/{activeTotal}
             </span>
           )}
         </div>
 
-        <div className="relative mt-3 grid h-[326px] grid-cols-[minmax(0,1fr)_82px] gap-2 sm:h-[350px]">
-          <span className="pointer-events-none absolute left-4 top-16 z-10 h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_10px_rgba(252,211,77,0.8)]" />
-          <span className="pointer-events-none absolute right-24 top-4 z-10 h-1 w-1 rounded-full bg-fuchsia-300 shadow-[0_0_8px_rgba(232,121,249,0.8)]" />
-          <span className="pointer-events-none absolute bottom-14 right-24 z-10 h-1.5 w-1.5 rounded-full bg-violet-300 shadow-[0_0_10px_rgba(196,181,253,0.8)]" />
-
-          <div className="grid min-w-0 grid-rows-[108px_minmax(0,1fr)] gap-2">
+        <div className="grid min-h-[430px] grid-cols-2 gap-3">
+          <div className="grid min-w-0 grid-rows-[116px_154px_116px] gap-3">
             <LookPiece
               slot="top"
+              label="Top"
               garment={selectedGarment('top')}
               active={activeSlot === 'top'}
               onSelect={() => setActiveSlot('top')}
-              imageClassName="max-h-[96px] max-w-[148px]"
+              imageClassName="max-h-[88px] max-w-[138px]"
             />
 
             <LookPiece
               slot="bottom"
+              label="Bottom"
               garment={selectedGarment('bottom')}
               active={activeSlot === 'bottom'}
               onSelect={() => setActiveSlot('bottom')}
-              imageClassName="max-h-[198px] max-w-[166px]"
-            />
-          </div>
-
-          <div className="grid min-w-0 grid-rows-2 gap-2">
-            <LookPiece
-              slot="accessory"
-              garment={selectedGarment('accessory')}
-              active={activeSlot === 'accessory'}
-              onSelect={() => setActiveSlot('accessory')}
-              imageClassName="max-h-[118px] max-w-[70px]"
+              imageClassName="max-h-[125px] max-w-[138px]"
             />
 
             <LookPiece
               slot="shoes"
+              label="Zapatos"
               garment={selectedGarment('shoes')}
               active={activeSlot === 'shoes'}
               onSelect={() => setActiveSlot('shoes')}
-              imageClassName="max-h-[118px] max-w-[70px]"
+              imageClassName="max-h-[86px] max-w-[140px]"
+            />
+          </div>
+
+          <div className="grid min-w-0 grid-rows-[174px_174px] gap-3 pt-6">
+            <JacketPlaceholder />
+
+            <LookPiece
+              slot="accessory"
+              label="Accesorio"
+              garment={selectedGarment('accessory')}
+              active={activeSlot === 'accessory'}
+              onSelect={() => setActiveSlot('accessory')}
+              imageClassName="max-h-[132px] max-w-[132px]"
             />
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-[42px_42px_1fr] gap-2">
+        <div className="mt-3 grid grid-cols-[44px_1fr_44px] gap-2">
           <button
             type="button"
             disabled={activeTotal <= 1}
             onClick={() => cycleGarment(activeSlot, -1)}
-            className="flex h-10 items-center justify-center rounded-xl border border-black/[0.06] bg-white/90 text-zinc-700 shadow-sm disabled:opacity-25 dark:border-white/10 dark:bg-[#111c2e]/90 dark:text-white"
+            className="flex h-11 items-center justify-center rounded-2xl border border-black/[0.07] bg-white text-zinc-700 shadow-sm transition active:scale-95 disabled:opacity-25 dark:border-white/10 dark:bg-[#111c2e] dark:text-white"
             aria-label="Prenda anterior"
           >
             <UiIcon name="chevron-left" className="h-5 w-5" />
@@ -244,24 +227,28 @@ export default function OutfitBuilderPage() {
 
           <button
             type="button"
-            disabled={activeTotal <= 1}
-            onClick={() => cycleGarment(activeSlot, 1)}
-            className="flex h-10 items-center justify-center rounded-xl border border-black/[0.06] bg-white/90 text-zinc-700 shadow-sm disabled:opacity-25 dark:border-white/10 dark:bg-[#111c2e]/90 dark:text-white"
-            aria-label="Prenda siguiente"
+            disabled={garments.length === 0}
+            onClick={randomizeLook}
+            className="flex h-11 items-center justify-center gap-2 rounded-2xl border border-black/[0.07] bg-white px-3 text-[10px] font-extrabold text-zinc-700 shadow-sm transition active:scale-[0.98] disabled:opacity-30 dark:border-white/10 dark:bg-[#111c2e] dark:text-slate-200"
           >
-            <UiIcon name="chevron-right" className="h-5 w-5" />
+            <UiIcon name="shuffle" className="h-4 w-4" />
+            Mezclar outfit
           </button>
 
           <button
             type="button"
-            disabled={garments.length === 0}
-            onClick={randomizeLook}
-            className="flex h-10 items-center justify-center gap-2 rounded-xl border border-black/[0.06] bg-white/90 px-3 text-[10px] font-extrabold text-zinc-700 shadow-sm disabled:opacity-30 dark:border-white/10 dark:bg-[#111c2e]/90 dark:text-slate-200"
+            disabled={activeTotal <= 1}
+            onClick={() => cycleGarment(activeSlot, 1)}
+            className="flex h-11 items-center justify-center rounded-2xl border border-black/[0.07] bg-white text-zinc-700 shadow-sm transition active:scale-95 disabled:opacity-25 dark:border-white/10 dark:bg-[#111c2e] dark:text-white"
+            aria-label="Prenda siguiente"
           >
-            <UiIcon name="shuffle" className="h-4 w-4" />
-            Aleatorio
+            <UiIcon name="chevron-right" className="h-5 w-5" />
           </button>
         </div>
+
+        <p className="mt-2 px-1 text-center text-[9px] leading-4 text-zinc-400 dark:text-slate-500">
+          Toca una tarjeta para cambiar esa parte del outfit con las flechas.
+        </p>
       </section>
 
       {error && (
@@ -376,12 +363,14 @@ export default function OutfitBuilderPage() {
 
 function LookPiece({
   slot,
+  label,
   garment,
   active,
   onSelect,
   imageClassName,
 }: {
   slot: OutfitSlot
+  label: string
   garment?: Garment
   active: boolean
   onSelect: () => void
@@ -392,28 +381,55 @@ function LookPiece({
       type="button"
       onClick={onSelect}
       className={[
-        'relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-[22px] border p-2 transition',
+        'group relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-[20px] border bg-white p-2.5 shadow-[0_7px_18px_rgba(46,35,72,0.05)] transition active:scale-[0.985] dark:bg-[#111c2e]',
         active
-          ? 'border-violet-400 bg-violet-50/55 ring-4 ring-violet-400/10 dark:border-fuchsia-400 dark:bg-violet-500/[0.08]'
-          : 'border-transparent bg-white/35 dark:bg-white/[0.025]',
+          ? 'border-violet-500 ring-4 ring-violet-400/10 dark:border-fuchsia-400'
+          : 'border-zinc-200/90 dark:border-white/10',
       ].join(' ')}
-      aria-label={`Seleccionar ${slot}`}
+      aria-label={`Seleccionar ${label}`}
+      aria-pressed={active}
     >
+      <span
+        className={[
+          'absolute left-2.5 top-2.5 z-10 rounded-full px-2 py-1 text-[9px] font-extrabold backdrop-blur',
+          active
+            ? 'bg-violet-600 text-white dark:bg-fuchsia-500'
+            : 'bg-white/90 text-zinc-700 shadow-sm dark:bg-[#0d1829]/90 dark:text-slate-300',
+        ].join(' ')}
+      >
+        {label}
+      </span>
+
       {garment ? (
         <GarmentImage
           imageId={garment.imageId}
           alt={garment.name}
           className={[
-            'h-full w-full object-contain mix-blend-multiply dark:mix-blend-normal',
+            'h-full w-full object-contain mix-blend-multiply transition-transform group-active:scale-[0.98] dark:mix-blend-normal',
             imageClassName,
           ].join(' ')}
         />
       ) : (
-        <span className="flex h-full w-full items-center justify-center rounded-[18px] border border-dashed border-zinc-200 text-zinc-300 dark:border-white/10 dark:text-slate-600">
+        <span className="flex h-full w-full flex-col items-center justify-center gap-2 rounded-[16px] border border-dashed border-zinc-200 text-zinc-300 dark:border-white/10 dark:text-slate-600">
           <ClothingIcon kind={slot as ClothingIconKind} className="h-8 w-8 opacity-45" />
+          <span className="text-[9px] font-bold">Sin prendas</span>
         </span>
       )}
     </button>
+  )
+}
+
+function JacketPlaceholder() {
+  return (
+    <div className="relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden rounded-[20px] border border-dashed border-zinc-200 bg-zinc-50/70 p-3 text-center dark:border-white/10 dark:bg-white/[0.025]">
+      <span className="absolute left-2.5 top-2.5 rounded-full bg-white/90 px-2 py-1 text-[9px] font-extrabold text-zinc-600 shadow-sm dark:bg-[#0d1829]/90 dark:text-slate-400">
+        Chaqueta
+      </span>
+      <div className="mt-5">
+        <div className="mx-auto h-10 w-12 rounded-xl border border-zinc-200 bg-white/80 dark:border-white/10 dark:bg-white/[0.03]" />
+        <p className="mt-2 text-[9px] font-bold text-zinc-400 dark:text-slate-500">Próximamente</p>
+      </div>
+    </div>
   )
 }
 
