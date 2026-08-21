@@ -6,9 +6,14 @@ const MINIMUM_PADDING = 36
 const COMPONENT_ALPHA_THRESHOLD = 96
 const MAX_UNGUIDED_COMPONENT_RATIO = 0.045
 const EDGE_CLEANUP_PASSES = 2
+const POINT_GUIDE_RADIUS_RATIO = 0.014
+const MIN_POINT_GUIDE_RADIUS = 3
 
 export interface GeminiLocalGuide {
   polygon: Array<{ x: number; y: number }>
+  foregroundPoints: Array<{ x: number; y: number }>
+  backgroundPoints: Array<{ x: number; y: number }>
+  confidence?: number
 }
 
 export interface GeminiGuidedSource {
@@ -28,7 +33,7 @@ function loadImage(source: Blob) {
 
     image.onerror = () => {
       URL.revokeObjectURL(objectUrl)
-      reject(new Error('No se pudo leer la imagen para aplicar la guía de Gemini.'))
+      reject(new Error('No se pudo leer la imagen para aplicar la guía de IA.'))
     }
 
     image.src = objectUrl
@@ -71,11 +76,40 @@ function fullImageMaskPoint(
   }
 }
 
+function fullImageGuidePoint(point: [number, number]) {
+  return {
+    x: clamp1000(point[0]),
+    y: clamp1000(point[1]),
+  }
+}
+
+function normalizePointToCrop(
+  point: { x: number; y: number },
+  cropX1: number,
+  cropY1: number,
+  cropWidthNormalized: number,
+  cropHeightNormalized: number,
+) {
+  return {
+    x: clamp01((point.x - cropX1) / cropWidthNormalized),
+    y: clamp01((point.y - cropY1) / cropHeightNormalized),
+  }
+}
+
+function pointInsideCrop(
+  point: { x: number; y: number },
+  cropX1: number,
+  cropY1: number,
+  cropX2: number,
+  cropY2: number,
+) {
+  return point.x >= cropX1 && point.x <= cropX2 && point.y >= cropY1 && point.y <= cropY2
+}
+
 /**
- * Gemini does not cut pixels here. It only locates the garment and produces a
- * semantic polygon. The crop keeps enough real background for the classical
- * algorithm to model it, while the normalized polygon is carried forward as
- * a soft guide for post-processing.
+ * The remote vision model only supplies spatial guidance. The crop keeps real
+ * background around the garment so the classical local algorithm can still
+ * calculate the actual alpha boundary from image pixels.
  */
 export async function prepareGeminiGuidedSource(
   source: Blob,
@@ -88,7 +122,7 @@ export async function prepareGeminiGuidedSource(
   const [rawYmin, rawXmin, rawYmax, rawXmax] = segmentation.box_2d.map(clamp1000)
 
   if (rawXmax <= rawXmin || rawYmax <= rawYmin) {
-    throw new Error('Gemini devolvió una región inválida para la prenda.')
+    throw new Error('La IA devolvió una región inválida para la prenda.')
   }
 
   let x1 = rawXmin
@@ -140,7 +174,7 @@ export async function prepareGeminiGuidedSource(
 
   const context = canvas.getContext('2d')
   if (!context) {
-    throw new Error('El navegador no pudo preparar la región guiada por Gemini.')
+    throw new Error('El navegador no pudo preparar la región guiada por IA.')
   }
 
   context.drawImage(
@@ -155,43 +189,75 @@ export async function prepareGeminiGuidedSource(
     sourceHeight,
   )
 
-  const polygon = fullMaskPoints.map((point) => ({
-    x: clamp01((point.x - cropX1) / cropWidthNormalized),
-    y: clamp01((point.y - cropY1) / cropHeightNormalized),
-  }))
+  const polygon = fullMaskPoints.map((point) =>
+    normalizePointToCrop(
+      point,
+      cropX1,
+      cropY1,
+      cropWidthNormalized,
+      cropHeightNormalized,
+    ),
+  )
+
+  const foregroundPoints = (segmentation.foreground_points ?? [])
+    .map(fullImageGuidePoint)
+    .filter((point) => pointInsideCrop(point, cropX1, cropY1, cropX2, cropY2))
+    .map((point) =>
+      normalizePointToCrop(
+        point,
+        cropX1,
+        cropY1,
+        cropWidthNormalized,
+        cropHeightNormalized,
+      ),
+    )
+
+  const backgroundPoints = (segmentation.background_points ?? [])
+    .map(fullImageGuidePoint)
+    .filter((point) => pointInsideCrop(point, cropX1, cropY1, cropX2, cropY2))
+    .map((point) =>
+      normalizePointToCrop(
+        point,
+        cropX1,
+        cropY1,
+        cropWidthNormalized,
+        cropHeightNormalized,
+      ),
+    )
 
   const guidedSource = await canvasToPng(
     canvas,
-    'No se pudo preparar la imagen guiada por Gemini.',
+    'No se pudo preparar la imagen guiada por IA.',
   )
 
   return {
     source: guidedSource,
-    guide: { polygon },
+    guide: {
+      polygon,
+      foregroundPoints,
+      backgroundPoints,
+      confidence: segmentation.confidence,
+    },
   }
 }
 
-function createGuideMask(width: number, height: number, guide: GeminiLocalGuide) {
-  const maskCanvas = document.createElement('canvas')
-  maskCanvas.width = width
-  maskCanvas.height = height
+function drawGuidePoint(
+  context: CanvasRenderingContext2D,
+  point: { x: number; y: number },
+  width: number,
+  height: number,
+) {
+  const radius = Math.max(
+    MIN_POINT_GUIDE_RADIUS,
+    Math.round(Math.min(width, height) * POINT_GUIDE_RADIUS_RATIO),
+  )
 
-  const context = maskCanvas.getContext('2d', { willReadFrequently: true })
-  if (!context || guide.polygon.length < 3) {
-    return new Uint8Array(width * height)
-  }
-
-  context.fillStyle = '#fff'
   context.beginPath()
-  context.moveTo(guide.polygon[0].x * width, guide.polygon[0].y * height)
-
-  for (let index = 1; index < guide.polygon.length; index += 1) {
-    context.lineTo(guide.polygon[index].x * width, guide.polygon[index].y * height)
-  }
-
-  context.closePath()
+  context.arc(point.x * width, point.y * height, radius, 0, Math.PI * 2)
   context.fill()
+}
 
+function canvasAlphaToMask(context: CanvasRenderingContext2D, width: number, height: number) {
   const pixels = context.getImageData(0, 0, width, height).data
   const mask = new Uint8Array(width * height)
 
@@ -202,9 +268,62 @@ function createGuideMask(width: number, height: number, guide: GeminiLocalGuide)
   return mask
 }
 
+function createGuideMask(width: number, height: number, guide: GeminiLocalGuide) {
+  const maskCanvas = document.createElement('canvas')
+  maskCanvas.width = width
+  maskCanvas.height = height
+
+  const context = maskCanvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    return new Uint8Array(width * height)
+  }
+
+  context.fillStyle = '#fff'
+
+  if (guide.polygon.length >= 3) {
+    context.beginPath()
+    context.moveTo(guide.polygon[0].x * width, guide.polygon[0].y * height)
+
+    for (let index = 1; index < guide.polygon.length; index += 1) {
+      context.lineTo(guide.polygon[index].x * width, guide.polygon[index].y * height)
+    }
+
+    context.closePath()
+    context.fill()
+  }
+
+  // Positive points act as additional semantic anchors. If the local cutout
+  // creates a detached garment component around one of these points, preserve
+  // that component even when the polygon itself missed it.
+  for (const point of guide.foregroundPoints) {
+    drawGuidePoint(context, point, width, height)
+  }
+
+  return canvasAlphaToMask(context, width, height)
+}
+
+function createBackgroundSeedMask(width: number, height: number, guide: GeminiLocalGuide) {
+  const maskCanvas = document.createElement('canvas')
+  maskCanvas.width = width
+  maskCanvas.height = height
+
+  const context = maskCanvas.getContext('2d', { willReadFrequently: true })
+  if (!context) {
+    return new Uint8Array(width * height)
+  }
+
+  context.fillStyle = '#fff'
+  for (const point of guide.backgroundPoints) {
+    drawGuidePoint(context, point, width, height)
+  }
+
+  return canvasAlphaToMask(context, width, height)
+}
+
 function removeUnguidedForegroundComponents(
   data: Uint8ClampedArray,
   guideMask: Uint8Array,
+  backgroundSeedMask: Uint8Array,
   width: number,
   height: number,
 ) {
@@ -223,6 +342,7 @@ function removeUnguidedForegroundComponents(
     let tail = 0
     let componentSize = 0
     let guideHits = 0
+    let backgroundHits = 0
 
     visited[start] = 1
     queue[tail++] = start
@@ -231,6 +351,7 @@ function removeUnguidedForegroundComponents(
       const pixelIndex = queue[head++]
       component[componentSize++] = pixelIndex
       guideHits += guideMask[pixelIndex]
+      backgroundHits += backgroundSeedMask[pixelIndex]
 
       const x = pixelIndex % width
       const y = Math.floor(pixelIndex / width)
@@ -255,11 +376,14 @@ function removeUnguidedForegroundComponents(
       }
     }
 
-    // Gemini is only a semantic anchor. Large regions are deliberately kept
-    // even when its polygon is imperfect. Small detached regions (hanger,
-    // hooks, isolated shadows and specks) are discarded when Gemini did not
-    // consider them garment pixels.
-    if (guideHits > 0 || componentSize > maxUnguidedComponent) {
+    // Polygon and positive points always win: they are explicit garment
+    // anchors. A component hit by a negative/background seed is removed when
+    // no garment anchor touches it, even if it is larger than normal noise.
+    if (guideHits > 0) {
+      continue
+    }
+
+    if (backgroundHits === 0 && componentSize > maxUnguidedComponent) {
       continue
     }
 
@@ -310,14 +434,14 @@ function cleanAlphaEdge(
 }
 
 /**
- * Refines the local algorithm result using Gemini only as semantic context.
- * The exact Gemini polygon is never used as the final alpha edge.
+ * Refines the local algorithm result using the remote model only as semantic
+ * context. The polygon and points never become the final alpha edge.
  */
 export async function refineGeminiGuidedResult(
   localResult: Blob,
   guide: GeminiLocalGuide,
 ): Promise<Blob> {
-  if (guide.polygon.length < 3) {
+  if (guide.polygon.length < 3 && guide.foregroundPoints.length === 0) {
     return localResult
   }
 
@@ -336,8 +460,15 @@ export async function refineGeminiGuidedResult(
   context.drawImage(image, 0, 0, width, height)
   const imageData = context.getImageData(0, 0, width, height)
   const guideMask = createGuideMask(width, height, guide)
+  const backgroundSeedMask = createBackgroundSeedMask(width, height, guide)
 
-  removeUnguidedForegroundComponents(imageData.data, guideMask, width, height)
+  removeUnguidedForegroundComponents(
+    imageData.data,
+    guideMask,
+    backgroundSeedMask,
+    width,
+    height,
+  )
   cleanAlphaEdge(imageData.data, width, height)
 
   context.putImageData(imageData, 0, 0)
