@@ -1,3 +1,5 @@
+name: my-virtual-closet-dev
+
 services:
 
   app:
