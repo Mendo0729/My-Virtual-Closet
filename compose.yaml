@@ -26,6 +26,29 @@ services:
 
     restart: unless-stopped
 
+  ai-proxy:
+    image: node:24-alpine
+    container_name: my-virtual-closet-ai-proxy
+
+    working_dir: /app
+    command: ["node", "server/gemini-proxy.mjs"]
+
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      PORT: "8787"
+
+    volumes:
+      - ./:/app:ro
+
+    networks:
+      - mvc-dev
+
+    cpus: "0.50"
+    mem_limit: 256m
+
+    restart: unless-stopped
+
 networks:
 
   mvc-dev:
