@@ -1,0 +1,22 @@
+{
+  "id": "/",
+  "name": "My Virtual Closet",
+  "short_name": "Closet",
+  "description": "Organiza tu closet, combina tus prendas y crea outfits desde tu dispositivo.",
+  "lang": "es",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b0b12",
+  "theme_color": "#7c3aed",
+  "categories": ["lifestyle", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/logo-my-virtual-closet.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

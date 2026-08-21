@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router'
 
 import './index.css'
 import App from './app/App'
+import { registerServiceWorker } from './pwa/registerServiceWorker'
 import { ThemeProvider } from './shared/theme/ThemeProvider'
 
 createRoot(document.getElementById('root')!).render(
@@ -15,3 +16,5 @@ createRoot(document.getElementById('root')!).render(
     </ThemeProvider>
   </StrictMode>,
 )
+
+registerServiceWorker()
