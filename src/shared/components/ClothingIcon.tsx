@@ -1,6 +1,6 @@
 import { useId } from 'react'
 
-export type ClothingIconKind = 'top' | 'bottom' | 'shoes' | 'accessory'
+export type ClothingIconKind = 'top' | 'bottom' | 'shoes' | 'jacket' | 'accessory'
 
 interface ClothingIconProps {
   kind: ClothingIconKind
@@ -73,6 +73,28 @@ export default function ClothingIcon({ kind, className = 'h-7 w-7' }: ClothingIc
         />
         <path d="M20 26.5 28 23M24.5 30l8-3.5M30 33l7.5-3" stroke="white" strokeOpacity="0.72" strokeWidth="2" strokeLinecap="round" />
         <path d="M11.5 40.5c12.4 3.2 25.7 3.8 39.8 1.7" stroke="white" strokeOpacity="0.3" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+    )
+  }
+
+  if (kind === 'jacket') {
+    return (
+      <svg viewBox="0 0 64 64" className={className} fill="none" aria-hidden="true">
+        <defs>
+          <linearGradient id={gradientId} x1="14" y1="10" x2="50" y2="56" gradientUnits="userSpaceOnUse">
+            <stop stopColor="currentColor" stopOpacity="0.94" />
+            <stop offset="1" stopColor="currentColor" stopOpacity="0.44" />
+          </linearGradient>
+        </defs>
+        <path
+          d="M22 11 13 17 8 31l9 4 4-8v28h22V27l4 8 9-4-5-14-9-6-4 7H26l-4-7Z"
+          fill={`url(#${gradientId})`}
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinejoin="round"
+        />
+        <path d="M26 18 32 25l6-7M32 25v30" stroke="white" strokeOpacity="0.68" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M24 35h5M35 35h5" stroke="white" strokeOpacity="0.34" strokeWidth="2" strokeLinecap="round" />
       </svg>
     )
   }
